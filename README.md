@@ -30,7 +30,7 @@ Provider Rules -> AI Negotiation -> Validated Offer -> Order -> VM Provisioning
 ## Team
 
 - Syed Shadan Raza
-- Mayan Hamdani
+- M Ayan Hamdani
 - Usaid
 - Bilal
 
