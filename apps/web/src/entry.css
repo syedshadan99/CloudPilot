@@ -1,0 +1,31 @@
+.entry {
+  max-inline-size: 42rem;
+  margin-inline: auto;
+  padding: clamp(var(--space-xxl), 7vw, var(--space-massive)) var(--space-lg);
+}
+
+.entry h1 {
+  margin: 0 0 var(--space-md);
+}
+
+.entry p {
+  margin: 0;
+}
+
+.entry-workflow {
+  margin-block-start: var(--space-xl);
+}
+
+.entry-workflow summary {
+  padding-block: var(--space-md);
+  cursor: pointer;
+}
+
+.entry-workflow ol {
+  margin-block: 0;
+  padding-inline-start: var(--space-xl);
+}
+
+.entry-workflow li + li {
+  margin-block-start: var(--space-sm);
+}

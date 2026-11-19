@@ -1,0 +1,42 @@
+/* Import once from the React entry point. */
+@import "./tokens.css";
+@import "./themes.css";
+@import "./typography.css";
+
+:root {
+  font-family: var(--font-ui);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: var(--border-thick) solid var(--color-focus);
+  outline-offset: var(--space-xxs);
+}
+
+/* Use the duration tokens for non-essential animations and transitions. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms;
+    --duration-normal: 0ms;
+    --duration-slow: 0ms;
+    --duration-x-slow: 0ms;
+  }
+}

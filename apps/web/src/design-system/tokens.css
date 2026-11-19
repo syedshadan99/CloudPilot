@@ -1,0 +1,168 @@
+/* Palette and gradient from app_colors.dart. */
+:root {
+  --palette-primary: #43632e;
+  --palette-primary2: #43632e;
+  --palette-primary-light: #3d6358;
+  --palette-primary-lighter: #4e7b6e;
+  --palette-primary-muted: #8aafa5;
+  --palette-primary-soft: #bdd4cf;
+  --palette-primary-pale: #deeae7;
+  --palette-secondary: #8e9b82;
+  --palette-secondary-soft: #8e9b8229;
+  --palette-secondary-dark: #4a5443;
+  --palette-secondary-medium: #6b7a60;
+  --palette-secondary-light: #adb8a2;
+  --palette-secondary-pale: #cdd5c6;
+  --palette-secondary-pastel: #e8ede4;
+  --palette-tertiary: #d97b66;
+  --palette-tertiary-soft: #d97b6624;
+  --palette-tertiary-dark: #7a2e1e;
+  --palette-tertiary-medium: #b85a42;
+  --palette-tertiary-light: #e4a394;
+  --palette-tertiary-pale: #f0c8bf;
+  --palette-tertiary-pastel: #f8e5e1;
+  --palette-neutral: #f7f5f0;
+  --palette-neutral-dark: #1a1a1a;
+  --palette-neutral-background: #f7f5f0;
+  --palette-neutral-border: #dddad4;
+  --palette-neutral-dark-grey: #3a3a3a;
+  --palette-neutral-medium-grey: #6b6b6b;
+  --palette-neutral-light-grey: #b0b0b0;
+  --palette-neutral-surface: #f0ede8;
+  --palette-button-primary: var(--palette-primary);
+  --palette-button-secondary: var(--palette-secondary);
+  --palette-button-inverted: var(--palette-neutral-dark);
+  --palette-button-outlined-border: var(--palette-neutral-dark);
+  --palette-button-outlined-foreground: var(--palette-neutral-dark);
+  --palette-icon-button-default: var(--palette-primary);
+  --palette-icon-button-edit: var(--palette-tertiary);
+  --palette-icon-button-delete: #b94040;
+  --palette-divider-primary: var(--palette-primary);
+  --palette-divider-secondary: var(--palette-secondary);
+  --palette-divider-tertiary: var(--palette-tertiary-dark);
+  --palette-search-background: #efece6;
+  --palette-search-border: var(--palette-neutral-border);
+  --palette-search-hint: var(--palette-neutral-light-grey);
+  --palette-card-background: #f2efe9;
+  --palette-scaffold-background: var(--palette-neutral-background);
+  --palette-divider: var(--palette-neutral-border);
+  --palette-dark-card: #222926;
+  --palette-dark-on-surface: #e8e4de;
+  --palette-muted-text: #56635d;
+  --palette-border: #e4e0d8;
+  --palette-success: #4a7c59;
+  --palette-warning: #d97b66;
+  --palette-error: #7a2e1e;
+  --palette-dark-red: #991b1b;
+  --palette-info: #3d6358;
+  --palette-hero-gradient-start: #3a5728;
+  --palette-hero-gradient-end: #5a7a3e;
+  --gradient-hero: linear-gradient(to bottom right, var(--palette-hero-gradient-start), var(--palette-primary), var(--palette-hero-gradient-end));
+}
+
+/* Dimensions and durations from app_sizes.dart. */
+:root {
+  --space-xxs: 2px;
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-base: 16px;
+  --space-lg: 20px;
+  --space-xl: 24px;
+  --space-xxl: 32px;
+  --space-xxxl: 40px;
+  --space-huge: 48px;
+  --space-massive: 64px;
+}
+
+:root {
+  --radius-base: 12px;
+  --radius-none: 0px;
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-xxl: 24px;
+  --radius-full: 999px;
+}
+
+:root {
+  --icon-xs: 12px;
+  --icon-sm: 16px;
+  --icon-md: 20px;
+  --icon-lg: 24px;
+  --icon-xl: 28px;
+  --icon-xxl: 32px;
+  --icon-button-sm: 36px;
+  --icon-button-md: 44px;
+  --icon-button-lg: 52px;
+}
+
+:root {
+  --elevation-none: 0px;
+  --elevation-xs: 1px;
+  --elevation-sm: 2px;
+  --elevation-md: 4px;
+  --elevation-lg: 8px;
+  --elevation-xl: 16px;
+}
+
+:root {
+  --border-thin: 1px;
+  --border-medium: 1.5px;
+  --border-thick: 2px;
+  --border-heavy: 3px;
+}
+
+:root {
+  --button-sm-height: 32px;
+  --button-md-height: 40px;
+  --button-lg-height: 48px;
+  --button-sm-padding-h: 12px;
+  --button-md-padding-h: 16px;
+  --button-lg-padding-h: 24px;
+  --button-sm-min-width: 64px;
+  --button-md-min-width: 88px;
+  --button-lg-min-width: 120px;
+}
+
+:root {
+  --input-height: 44px;
+  --input-horizontal-padding: 16px;
+  --input-vertical-padding: 10px;
+  --input-prefix-icon-size: 20px;
+  --input-border-width: 1px;
+}
+
+:root {
+  --card-default-padding: 16px;
+  --card-large-padding: 24px;
+  --card-border-radius: var(--radius-lg);
+  --card-border-width: 1px;
+}
+
+:root {
+  --divider-thickness: 1.5px;
+  --divider-thick-line: 2.5px;
+  --divider-indent: 0px;
+  --divider-end-indent: 0px;
+  --divider-vertical-height: 24px;
+}
+
+:root {
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --duration-slow: 400ms;
+  --duration-x-slow: 600ms;
+}
+
+/* CSS shadow recipes for the source elevation levels. */
+:root {
+  --shadow-none: none;
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 12%);
+  --shadow-sm: 0 2px 4px rgb(0 0 0 / 14%);
+  --shadow-md: 0 4px 8px rgb(0 0 0 / 16%);
+  --shadow-lg: 0 8px 16px rgb(0 0 0 / 18%);
+  --shadow-xl: 0 16px 32px rgb(0 0 0 / 20%);
+}
