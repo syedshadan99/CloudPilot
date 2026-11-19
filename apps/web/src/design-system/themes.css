@@ -1,0 +1,45 @@
+/* Semantic colors from app_theme.dart, with readable foregrounds for web text. */
+:root {
+  color-scheme: light;
+  --color-primary: var(--palette-primary);
+  --color-on-primary: var(--palette-neutral);
+  --color-secondary: var(--palette-secondary);
+  --color-on-secondary: var(--palette-neutral-dark);
+  --color-tertiary: var(--palette-tertiary);
+  --color-on-tertiary: var(--palette-neutral-dark);
+  --color-error: var(--palette-error);
+  --color-on-error: var(--palette-neutral);
+  --color-bg: var(--palette-scaffold-background);
+  --color-surface: var(--palette-card-background);
+  --color-text: var(--palette-neutral-dark);
+  --color-text-muted: var(--palette-muted-text);
+  --color-border: var(--palette-neutral-border);
+  --color-focus: var(--palette-primary);
+}
+
+/* Follow the OS until the app sets data-theme="light" or data-theme="dark". */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --color-primary: var(--palette-primary-lighter);
+    --color-on-primary: #fff;
+    --color-bg: var(--palette-neutral-dark);
+    --color-surface: var(--palette-dark-card);
+    --color-text: var(--palette-dark-on-surface);
+    --color-text-muted: var(--palette-primary-muted);
+    --color-border: var(--palette-muted-text);
+    --color-focus: var(--palette-primary-muted);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-primary: var(--palette-primary-lighter);
+  --color-on-primary: #fff;
+  --color-bg: var(--palette-neutral-dark);
+  --color-surface: var(--palette-dark-card);
+  --color-text: var(--palette-dark-on-surface);
+  --color-text-muted: var(--palette-primary-muted);
+  --color-border: var(--palette-muted-text);
+  --color-focus: var(--palette-primary-muted);
+}
