@@ -9,6 +9,7 @@ import { APP_CONFIG, appConfigProvider } from "./app.config.js";
     ConfigModule.forRoot({
       validate,
       expandVariables: false,
+      envFilePath: [".env", "../../.env"],
     }),
   ],
   providers: [appConfigProvider],

@@ -46,7 +46,6 @@ export class EnvironmentVariables {
   PGUSER: string = "cloudpilot";
 
   @IsString()
-  @MinLength(1)
   PGPASSWORD: string = "";
 
   @IsString()
