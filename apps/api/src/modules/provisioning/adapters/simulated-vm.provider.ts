@@ -79,6 +79,25 @@ export class SimulatedVmProvider implements VirtualMachineProvider {
     return { simulatedVmId, hostname, ipAddress };
   }
 
+  async resize(request: import("./vm-provider.interface.js").ResizeRequest): Promise<import("./vm-provider.interface.js").ResizeResult> {
+    this.logger.log(`Simulating resize for VM ${request.vmId} (${request.requestId})`);
+
+    const stages = [
+      "VALIDATING_SPEC",
+      "ADJUSTING_HARDWARE",
+      "UPDATING_FILE_SYSTEM",
+      "VERIFYING_HEALTH",
+    ] as const;
+
+    for (const stage of stages) {
+      this.logger.debug(`Resize ${request.requestId} → ${stage}`);
+      await this.pause();
+    }
+
+    this.logger.log(`Resize complete for VM ${request.vmId}`);
+    return { success: true };
+  }
+
   /**
    * Derives a stable 10.x.x.x address from the job UUID for reproducibility.
    * Not routable — purely for simulation display.

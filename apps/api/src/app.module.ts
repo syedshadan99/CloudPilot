@@ -6,8 +6,18 @@ import { ChatModule } from "./modules/chat/chat.module.js";
 import { ProvisioningModule } from "./modules/provisioning/provisioning.module.js";
 import { VmsModule } from "./modules/vms/vms.module.js";
 import { UsageModule } from "./modules/usage/usage.module.js";
+import { UpgradesModule } from "./modules/upgrades/upgrades.module.js";
 
 @Module({
-  imports: [AppConfigModule, DatabaseModule, HealthModule, ChatModule, ProvisioningModule, VmsModule, UsageModule],
+  imports: [
+    AppConfigModule,
+    DatabaseModule,
+    HealthModule,
+    ChatModule,
+    ProvisioningModule,
+    VmsModule,
+    UsageModule,
+    UpgradesModule,
+  ],
 })
 export class AppModule {}
