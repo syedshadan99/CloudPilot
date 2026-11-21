@@ -7,6 +7,9 @@ import { ProvisioningModule } from "./modules/provisioning/provisioning.module.j
 import { VmsModule } from "./modules/vms/vms.module.js";
 import { UsageModule } from "./modules/usage/usage.module.js";
 import { UpgradesModule } from "./modules/upgrades/upgrades.module.js";
+import { NotificationsModule } from "./modules/notifications/notifications.module.js";
+import { SupportModule } from "./modules/support/support.module.js";
+import { AuditModule } from "./modules/audit/audit.module.js";
 
 @Module({
   imports: [
@@ -18,6 +21,9 @@ import { UpgradesModule } from "./modules/upgrades/upgrades.module.js";
     VmsModule,
     UsageModule,
     UpgradesModule,
+    NotificationsModule,
+    SupportModule,
+    AuditModule,
   ],
 })
 export class AppModule {}
