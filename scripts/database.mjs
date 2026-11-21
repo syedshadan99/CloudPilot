@@ -215,6 +215,40 @@ async function seed(pool = createPool()) {
   }
 }
 
+async function reset(pool = createPool()) {
+  if ((process.env.NODE_ENV ?? "development") === "production") {
+    throw new Error("Database reset is disabled when NODE_ENV=production");
+  }
+  if (process.env.CLOUDPILOT_CONFIRM_RESET !== "CLOUDPILOT_RESET") {
+    throw new Error(
+      "Database reset requires CLOUDPILOT_CONFIRM_RESET=CLOUDPILOT_RESET",
+    );
+  }
+
+  const client = await pool.connect();
+  try {
+    await acquireMigrationLock(client);
+    await client.query("BEGIN");
+    try {
+      await client.query("DROP SCHEMA public CASCADE");
+      await client.query("CREATE SCHEMA public");
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw new Error(`Database reset failed: ${error.message}`, { cause: error });
+    }
+  } finally {
+    try {
+      await releaseMigrationLock(client);
+    } finally {
+      client.release();
+    }
+  }
+
+  await migrate(pool);
+  await seed(pool);
+}
+
 async function main() {
   const command = process.argv[2] ?? "migrate";
   const pool = createPool();
@@ -225,8 +259,10 @@ async function main() {
       console.table(await readStatus(pool));
     } else if (command === "seed") {
       await seed(pool);
+    } else if (command === "reset") {
+      await reset(pool);
     } else {
-      throw new Error(`Unknown database command: ${command}. Use migrate, status, or seed.`);
+      throw new Error(`Unknown database command: ${command}. Use migrate, status, seed, or reset.`);
     }
   } finally {
     await pool.end();

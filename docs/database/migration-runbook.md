@@ -68,11 +68,22 @@ Do not drop schemas or volumes in normal migration/seed commands. If a
 migration fails, inspect the PostgreSQL error, fix forward with a new numbered
 migration, and rerun `npm run db:migrate`. Never edit an applied migration.
 
+For a disposable local/test database, the explicit reset command can recreate
+the public schema, run all migrations and seed the demo data:
+
+```powershell
+$env:NODE_ENV = 'test'
+$env:CLOUDPILOT_CONFIRM_RESET = 'CLOUDPILOT_RESET'
+npm run db:reset
+```
+
+The command refuses production and refuses to run without the exact
+confirmation variable. It is still destructive; verify the connection points
+only at the intended disposable database before invoking it.
+
 For an isolated disposable test database only, stop the test client and reset
 that explicitly named database/schema using the database administrator’s
-approved procedure. Do not run a reset command against a shared or production
-database. The repository intentionally provides no automatic destructive reset
-command.
+approved procedure. Do not run it against a shared or production database.
 
 ## Adding a future migration
 

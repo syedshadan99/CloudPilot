@@ -11,6 +11,9 @@ The migration and seed commands are implemented in `scripts/database.mjs`:
 npm run db:migrate
 npm run db:status
 npm run db:seed # development/test only
+# Explicitly guarded disposable reset; never use on shared/production data
+$env:CLOUDPILOT_CONFIRM_RESET = 'CLOUDPILOT_RESET'
+npm run db:reset
 ```
 
 Set `DATABASE_URL` or the standard `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, and

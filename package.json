@@ -12,6 +12,7 @@
     "db:migrate": "node scripts/database.mjs migrate",
     "db:status": "node scripts/database.mjs status",
     "db:seed": "node scripts/database.mjs seed",
+    "db:reset": "node scripts/database.mjs reset",
     "test:database": "node --test apps/api/test/integration/database.test.mjs"
   },
   "devDependencies": {
