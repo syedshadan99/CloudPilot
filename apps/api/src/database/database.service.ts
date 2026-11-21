@@ -1,5 +1,5 @@
 import { Injectable, Logger, type OnApplicationShutdown } from "@nestjs/common";
-import { Pool } from "pg";
+import { Pool, type QueryResult, type QueryResultRow } from "pg";
 
 @Injectable()
 export class DatabaseService implements OnApplicationShutdown {
@@ -17,6 +17,17 @@ export class DatabaseService implements OnApplicationShutdown {
 
   async checkConnection(): Promise<void> {
     await this.pool.query("SELECT 1");
+  }
+
+  /**
+   * Execute a parameterised SQL query and return the full pg QueryResult.
+   * Use this for all domain data access instead of importing pg directly.
+   */
+  async query<T extends QueryResultRow = QueryResultRow>(
+    sql: string,
+    values?: unknown[],
+  ): Promise<QueryResult<T>> {
+    return this.pool.query<T>(sql, values);
   }
 
   async onApplicationShutdown(): Promise<void> {

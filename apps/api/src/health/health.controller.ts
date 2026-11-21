@@ -1,7 +1,22 @@
-import { Controller, Get, ServiceUnavailableException } from "@nestjs/common";
+import {
+  Controller,
+  Get,
+  ServiceUnavailableException,
+  VERSION_NEUTRAL,
+} from "@nestjs/common";
 import { DatabaseService } from "../database/database.service.js";
 
-@Controller("health")
+/**
+ * Infrastructure health endpoints.
+ *
+ * These endpoints are version-neutral and excluded from the `/api` global
+ * prefix so container orchestrators and load balancers can probe them at
+ * their canonical paths:
+ *
+ *   GET /health      — API process liveness
+ *   GET /health/db   — PostgreSQL reachability
+ */
+@Controller({ path: "health", version: VERSION_NEUTRAL })
 export class HealthController {
   constructor(private readonly database: DatabaseService) {}
 
