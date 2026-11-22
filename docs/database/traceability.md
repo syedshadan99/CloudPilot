@@ -15,6 +15,17 @@
 | P11 upgrade/downgrade and resize recovery | `upgrade_requests`, `vm_configuration_history` | `0004` | One current configuration; applied history |
 | Architecture notifications/support; CP-15 | `notifications`, `notification_deliveries`, `support_tickets`, `support_messages` | `0004` | Foreign key/content constraints; seeded examples |
 | Architecture audit/security; FR-15, NFR-71, NFR-77 | `audit_logs`, request/correlation metadata | `0004` | Audit indexes and no-secret seed review |
+
+## CP-04 implementation traceability
+
+| CP-04 capability | Runtime location | Verification |
+| --- | --- | --- |
+| Customer VM catalog and scoped provider template administration | `apps/api/src/modules/catalog/` | unit DTO/calculation coverage; PostgreSQL seed and ownership queries |
+| Simulated capacity and reservation-state aggregation | `catalog.repository.ts`, `capacity.service.ts` | committed/released/held aggregation and pool-shrink integration checks |
+| Versioned pricing/rules and historical immutability | `apps/api/src/modules/pricing/` | exact-money tests; active-version/rule uniqueness and snapshot checks |
+| Deterministic nonbinding quotes | `pricing.service.ts`, `services/money.ts` | hourly/daily/monthly, fixed-30-day monthly and exact-decimal unit tests |
+| Negotiation policy lifecycle and evaluation | `policy.service.ts` | floor, ceiling and approval-threshold unit tests; organization-scoped routes |
+| Provider change audit | `common/audit/`, catalog/pricing repositories | transactional `audit_logs` writes for catalog, pool, version, rule and policy changes |
 | Backlog CP-02 acceptance: migrations, reset/seed, ERD | CLI runner, checksum tracking, reproducible seed, ERDs, dictionary, runbook | `scripts/database.mjs`, `0001`–`0008`, `001_demo.sql` | `db:migrate`, `db:status`, `db:seed` twice, tests, build |
 
 The supplied academic ERD remains preserved. CP-02 extends it with the tables
