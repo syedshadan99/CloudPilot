@@ -30,6 +30,19 @@ export interface CapacityCheckResult {
   reason?: string;
 }
 
+export interface ResizeRequest {
+  requestId: string;
+  vmId: string;
+  simulatedVmId?: string;
+  oldConfig: Partial<VmConfig>;
+  newConfig: Partial<VmConfig>;
+}
+
+export interface ResizeResult {
+  success: boolean;
+  message?: string;
+}
+
 /**
  * Replaceable provider adapter. Implement this to swap in a real cloud
  * provider without touching the provisioning service or job processor.
@@ -49,6 +62,11 @@ export interface VirtualMachineProvider {
    * Returns identifiers once the VM is reachable. Throws on unrecoverable failure.
    */
   provision(request: ProvisionRequest): Promise<ProvisionResult>;
+
+  /**
+   * Apply a resize to an existing simulated or real VM.
+   */
+  resize(request: ResizeRequest): Promise<ResizeResult>;
 }
 
 export const VM_PROVIDER = Symbol("VM_PROVIDER");

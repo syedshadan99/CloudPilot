@@ -17,7 +17,8 @@ export type VmState =
   | "RUNNING"
   | "STOPPING"
   | "STOPPED"
-  | "TERMINATED";
+  | "TERMINATED"
+  | "RESIZING";
 
 export type VmAction = "START" | "STOP" | "RESTART" | "TERMINATE";
 
@@ -34,6 +35,9 @@ const TRANSITIONS: Record<string, Record<string, VmState>> = {
     START:     "RUNNING",
     RESTART:   "RUNNING",
     TERMINATE: "TERMINATED",
+  },
+  RESIZING: {
+    // RESIZING blocks all customer actions; transitions are system-controlled.
   },
 };
 

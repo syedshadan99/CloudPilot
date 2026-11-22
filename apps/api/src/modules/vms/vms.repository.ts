@@ -100,6 +100,14 @@ export class VmsRepository {
     return r.rows[0]!;
   }
 
+  async updateConfig(id: string, vmConfig: Record<string, unknown>): Promise<VmRow> {
+    const r = await this.db.query<VmRow>(
+      `UPDATE virtual_machines SET vm_config = $2, updated_at = NOW() WHERE id = $1 RETURNING *`,
+      [id, JSON.stringify(vmConfig)],
+    );
+    return r.rows[0]!;
+  }
+
   async recordEvent(params: {
     vmId: string;
     actorId: string;

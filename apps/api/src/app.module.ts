@@ -8,11 +8,32 @@ import { VmsModule } from "./modules/vms/vms.module.js";
 import { UsageModule } from "./modules/usage/usage.module.js";
 import { IdentityModule } from "./modules/identity/identity.module.js";
 import { OnboardingModule } from "./modules/onboarding/onboarding.module.js";
-import { AuditModule } from "./common/audit/audit.module.js";
+import { AuditModule as CommonAuditModule } from "./common/audit/audit.module.js";
 import { CatalogModule } from "./modules/catalog/catalog.module.js";
 import { PricingModule } from "./modules/pricing/pricing.module.js";
+import { UpgradesModule } from "./modules/upgrades/upgrades.module.js";
+import { NotificationsModule } from "./modules/notifications/notifications.module.js";
+import { SupportModule } from "./modules/support/support.module.js";
+import { AuditModule } from "./modules/audit/audit.module.js";
 
 @Module({
-  imports: [AppConfigModule, DatabaseModule, AuditModule, IdentityModule, OnboardingModule, CatalogModule, PricingModule, HealthModule, ChatModule, ProvisioningModule, VmsModule, UsageModule],
+  imports: [
+    AppConfigModule,
+    DatabaseModule,
+    CommonAuditModule,
+    IdentityModule,
+    OnboardingModule,
+    CatalogModule,
+    PricingModule,
+    HealthModule,
+    ChatModule,
+    ProvisioningModule,
+    VmsModule,
+    UsageModule,
+    UpgradesModule,
+    NotificationsModule,
+    SupportModule,
+    AuditModule,
+  ],
 })
 export class AppModule {}

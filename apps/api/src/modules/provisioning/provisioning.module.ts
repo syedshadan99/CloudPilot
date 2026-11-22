@@ -17,6 +17,6 @@ import { SimulatedVmProvider } from "./adapters/simulated-vm.provider.js";
       useClass: SimulatedVmProvider,
     },
   ],
-  exports: [ProvisioningService],
+  exports: [ProvisioningService, VM_PROVIDER],
 })
 export class ProvisioningModule {}
