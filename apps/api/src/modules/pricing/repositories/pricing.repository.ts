@@ -188,8 +188,8 @@ export class PricingRepository {
     });
   }
 
-  async loadQuoteContext(templateId: string | undefined, organizationId: string | undefined, region: string | undefined) {
-    return this.db.transaction(async (client) => {
+  async loadQuoteContext(templateId: string | undefined, organizationId: string | undefined, region: string | undefined, transactionClient?: PoolClient) {
+    const load = async (client: PoolClient) => {
       let template: QuoteTemplate | null = null;
       let resolvedOrganizationId = organizationId;
       if (templateId) {
@@ -202,7 +202,7 @@ export class PricingRepository {
         template = result.rows[0] ?? null;
         if (!template) throw new NotFoundException("VM template not found");
         resolvedOrganizationId = template.organization_id;
-        if (!template.active || template.availability === "retired") throw new ConflictException("This VM template is not eligible for new quotations");
+        if (!template.active || template.availability === "retired" || template.availability === "unavailable") throw new ConflictException("This VM template is not eligible for new quotations");
       }
       if (!resolvedOrganizationId) throw new ConflictException("An organization is required for a custom configuration");
       const quoteRegion = region ?? template?.region;
@@ -226,7 +226,8 @@ export class PricingRepository {
          GROUP BY p.id`, [resolvedOrganizationId, quoteRegion, template?.capacity_pool_id ?? null],
       );
       return { template, organizationId: resolvedOrganizationId, version, rules: rules.rows, pools: pools.rows };
-    });
+    };
+    return transactionClient ? load(transactionClient) : this.db.transaction(load);
   }
 
   async listPolicies(organizationId: string, page: number, pageSize: number) {
@@ -281,8 +282,9 @@ export class PricingRepository {
     });
   }
 
-  async effectivePolicy(organizationId: string, at = new Date()): Promise<PolicyRow | undefined> {
-    const result = await this.db.query<PolicyRow>(`SELECT id, organization_id, name, maximum_discount_percent, minimum_price, approval_threshold, maximum_attempts, effective_from, effective_to, active, created_by, created_at FROM negotiation_policies WHERE organization_id = $1 AND active = true AND effective_from <= $2 AND (effective_to IS NULL OR effective_to > $2) ORDER BY effective_from DESC, created_at DESC, id DESC LIMIT 1`, [organizationId, at]); return result.rows[0];
+  async effectivePolicy(organizationId: string, at = new Date(), transactionClient?: PoolClient): Promise<PolicyRow | undefined> {
+    const executor = (transactionClient ?? this.db) as unknown as { query<T extends QueryResultRow>(sql: string, values?: unknown[]): Promise<{ rows: T[] }> };
+    const result = await executor.query<PolicyRow>(`SELECT id, organization_id, name, maximum_discount_percent, minimum_price, approval_threshold, maximum_attempts, effective_from, effective_to, active, created_by, created_at FROM negotiation_policies WHERE organization_id = $1 AND active = true AND effective_from <= $2 AND (effective_to IS NULL OR effective_to > $2) ORDER BY effective_from DESC, created_at DESC, id DESC LIMIT 1${transactionClient ? " FOR SHARE" : ""}`, [organizationId, at]); return result.rows[0];
   }
 
   private async assertTemplateOwnership(client: PoolClient, templateId: string | undefined, organizationId: string): Promise<void> {

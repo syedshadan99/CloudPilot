@@ -7,6 +7,7 @@
 | Architecture VM catalog, capacity and pricing; P5 | `vm_templates`, `capacity_pools`, `capacity_reservations`, `pricing_versions`, `pricing_rules`, `negotiation_policies` | `0004` | Resource/rate checks; four seeded templates; status/index checks |
 | CP-11 chat persistence and controlled AI boundary | `chat_sessions`, `chat_messages`, `vm_requirements`, offer linkage | `0001`, `0004` | Existing chat compatibility; FK and sequence constraints |
 | First-demo workflow steps 2–3; P7 offers | `offers`, `offer_events`, `offer_approvals` | `0004` | Price equation, status/expiry checks; accepted/review examples |
+| CP-05 deterministic negotiation | `negotiation_attempts`, `offers.parent_offer_id`, `offers.commercial_snapshot`, actionable-offer unique index | `0009` | Unit engine/state tests; transactional attempt/lineage/expiry/provider-review checks |
 | First-demo workflow step 3; P8 order confirmation | `orders`, `order_events`, unique offer/order mapping, `idempotency_keys` | `0004`, `0005` | Duplicate order/invoice uniqueness and gate test |
 | First-demo workflow step 3; P10 billing | `billing_accounts`, `invoices`, `invoice_items`, `invoice_adjustments`, `charge_ledger_entries` | `0004`, `0006` | Invoice line reconciliation and exact numeric totals |
 | First-demo workflow steps 4–5; simulated payment gate | `payment_records`, order payment/provisioning timestamps | `0004` | Payment-gated state query; unique verified order payment |

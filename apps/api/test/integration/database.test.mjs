@@ -35,6 +35,7 @@ test("migration tracking and core tables are present", async () => {
     "vm_templates",
     "pricing_versions",
     "offers",
+    "negotiation_attempts",
     "orders",
     "billing_accounts",
     "invoices",

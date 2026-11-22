@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import type { PoolClient } from "pg";
 import type { AuthenticatedPrincipal } from "../../../common/auth/authenticated-principal.js";
 import { AuthorizationService } from "../../identity/services/authorization.service.js";
 import { IdentityService } from "../../identity/services/identity.service.js";
@@ -72,7 +73,20 @@ export class PricingService {
 
   async quote(user: AuthenticatedPrincipal, dto: QuoteDto) {
     await this.identity.assertActiveCustomer(user.userId);
-    const context = await this.repo.loadQuoteContext(dto.templateId, dto.organizationId, dto.region);
+    return this.authoritativeQuote(dto);
+  }
+
+  /**
+   * Resolve a quote using the same pricing context and exact arithmetic as the
+   * public quote endpoint. A transaction client can be supplied by a domain
+   * workflow so context resolution and offer persistence share one snapshot.
+   */
+  async authoritativeQuote(dto: QuoteDto, transactionClient?: PoolClient) {
+    const context = await this.repo.loadQuoteContext(dto.templateId, dto.organizationId, dto.region, transactionClient);
+    return this.buildQuote(dto, context);
+  }
+
+  private buildQuote(dto: QuoteDto, context: Awaited<ReturnType<PricingRepository["loadQuoteContext"]>>) {
     const config = dto.templateId && context.template ? {
       templateId: context.template.id, organizationId: context.organizationId, name: context.template.name, slug: context.template.slug,
       cpuCores: context.template.cpu_cores, ramGb: context.template.ram_gb, storageGb: context.template.storage_gb,
