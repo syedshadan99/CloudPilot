@@ -27,9 +27,10 @@ export class ChatService {
     return this.repo.listSessions(customerId);
   }
 
-  async getSession(id: string) {
+  async getSession(id: string, customerId?: string) {
     const session = await this.repo.findSession(id);
     if (!session) throw new NotFoundException(`Chat session ${id} not found`);
+    if (customerId && session.customer_id !== customerId) throw new NotFoundException(`Chat session ${id} not found`);
 
     const messages = await this.repo.listMessages(id);
     const requirements = await this.repo.findRequirements(id);
@@ -39,10 +40,11 @@ export class ChatService {
 
   // ── Messages ──────────────────────────────────────────────────────────────
 
-  async sendMessage(sessionId: string, dto: CreateMessageDto) {
+  async sendMessage(sessionId: string, dto: CreateMessageDto, customerId?: string) {
     // Verify session exists
     const session = await this.repo.findSession(sessionId);
     if (!session) throw new NotFoundException(`Chat session ${sessionId} not found`);
+    if (customerId && session.customer_id !== customerId) throw new NotFoundException(`Chat session ${sessionId} not found`);
 
     // Persist user message
     const userMessage = await this.repo.addMessage(sessionId, "user", dto.content);
@@ -95,17 +97,19 @@ export class ChatService {
 
   // ── Requirements ─────────────────────────────────────────────────────────
 
-  async getRequirements(sessionId: string) {
+  async getRequirements(sessionId: string, customerId?: string) {
     const session = await this.repo.findSession(sessionId);
     if (!session) throw new NotFoundException(`Chat session ${sessionId} not found`);
+    if (customerId && session.customer_id !== customerId) throw new NotFoundException(`Chat session ${sessionId} not found`);
 
     const requirements = await this.repo.findRequirements(sessionId);
     return requirements ?? null;
   }
 
-  async updateRequirements(sessionId: string, dto: UpdateRequirementsDto) {
+  async updateRequirements(sessionId: string, dto: UpdateRequirementsDto, customerId?: string) {
     const session = await this.repo.findSession(sessionId);
     if (!session) throw new NotFoundException(`Chat session ${sessionId} not found`);
+    if (customerId && session.customer_id !== customerId) throw new NotFoundException(`Chat session ${sessionId} not found`);
 
     const reqs = {
       cpuCores: dto.cpuCores,

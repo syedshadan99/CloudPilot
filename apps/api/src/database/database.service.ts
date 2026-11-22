@@ -1,5 +1,5 @@
 import { Injectable, Logger, type OnApplicationShutdown } from "@nestjs/common";
-import { Pool, type QueryResult, type QueryResultRow } from "pg";
+import { Pool, type PoolClient, type QueryResult, type QueryResultRow } from "pg";
 
 @Injectable()
 export class DatabaseService implements OnApplicationShutdown {
@@ -28,6 +28,32 @@ export class DatabaseService implements OnApplicationShutdown {
     values?: unknown[],
   ): Promise<QueryResult<T>> {
     return this.pool.query<T>(sql, values);
+  }
+
+  /**
+   * Run related writes on one checked-out PostgreSQL connection.  A transaction
+   * cannot be composed from independent pool.query calls because each call may
+   * use a different connection.
+   */
+  async transaction<T>(callback: (client: PoolClient) => Promise<T>): Promise<T> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await callback(client);
+      await client.query("COMMIT");
+      return result;
+    } catch (error) {
+      try {
+        await client.query("ROLLBACK");
+      } catch (rollbackError) {
+        this.logger.error(
+          `PostgreSQL rollback failed: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`,
+        );
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async onApplicationShutdown(): Promise<void> {
