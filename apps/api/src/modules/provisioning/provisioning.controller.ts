@@ -5,6 +5,7 @@ import {
   Param,
   Post,
 } from "@nestjs/common";
+import { Roles } from "../../common/decorators/index.js";
 import { ProvisioningService } from "./provisioning.service.js";
 import { CreateProvisioningJobDto } from "./dto/index.js";
 
@@ -21,6 +22,7 @@ import { CreateProvisioningJobDto } from "./dto/index.js";
  *   Get the provisioning job and progress for a given order.
  */
 @Controller("provisioning")
+@Roles("provider_admin", "provider_staff")
 export class ProvisioningController {
   constructor(private readonly service: ProvisioningService) {}
 

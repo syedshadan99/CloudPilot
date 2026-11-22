@@ -5,6 +5,7 @@ import {
   VERSION_NEUTRAL,
 } from "@nestjs/common";
 import { DatabaseService } from "../database/database.service.js";
+import { Public } from "../common/decorators/index.js";
 
 /**
  * Infrastructure health endpoints.
@@ -21,11 +22,13 @@ export class HealthController {
   constructor(private readonly database: DatabaseService) {}
 
   @Get()
+  @Public()
   getHealth() {
     return { status: "ok" };
   }
 
   @Get("db")
+  @Public()
   async getDatabaseHealth() {
     try {
       await this.database.checkConnection();
