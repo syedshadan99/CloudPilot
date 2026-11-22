@@ -8,6 +8,8 @@ import {
   Put,
   Query,
 } from "@nestjs/common";
+import { CurrentUser, Roles } from "../../common/decorators/index.js";
+import type { AuthenticatedPrincipal } from "../../common/auth/authenticated-principal.js";
 import { ChatService } from "./chat.service.js";
 import { CreateSessionDto, CreateMessageDto, UpdateRequirementsDto } from "./dto/chat.dto.js";
 
@@ -22,39 +24,38 @@ import { CreateSessionDto, CreateMessageDto, UpdateRequirementsDto } from "./dto
  * PUT  /api/v1/chat/sessions/:id/requirements
  */
 @Controller("chat")
+@Roles("customer")
 export class ChatController {
   constructor(private readonly service: ChatService) {}
 
   @Post("sessions")
-  createSession(@Body() dto: CreateSessionDto) {
-    return this.service.createSession(dto);
+  createSession(@Body() dto: CreateSessionDto, @CurrentUser() user: AuthenticatedPrincipal) {
+    return this.service.createSession({ ...dto, customerId: user.userId });
   }
 
   @Get("sessions")
-  listSessions(@Query("customerId") customerId: string) {
-    if (!customerId) {
-      throw new NotFoundException("customerId query parameter is required");
-    }
-    return this.service.listSessions(customerId);
+  listSessions(@Query("customerId") customerId: string | undefined, @CurrentUser() user: AuthenticatedPrincipal) {
+    if (customerId && customerId !== user.userId) throw new NotFoundException("Chat sessions not found");
+    return this.service.listSessions(user.userId);
   }
 
   @Get("sessions/:id")
-  getSession(@Param("id") id: string) {
-    return this.service.getSession(id);
+  getSession(@Param("id") id: string, @CurrentUser() user: AuthenticatedPrincipal) {
+    return this.service.getSession(id, user.userId);
   }
 
   @Post("sessions/:id/messages")
-  sendMessage(@Param("id") id: string, @Body() dto: CreateMessageDto) {
-    return this.service.sendMessage(id, dto);
+  sendMessage(@Param("id") id: string, @Body() dto: CreateMessageDto, @CurrentUser() user: AuthenticatedPrincipal) {
+    return this.service.sendMessage(id, dto, user.userId);
   }
 
   @Get("sessions/:id/requirements")
-  getRequirements(@Param("id") id: string) {
-    return this.service.getRequirements(id);
+  getRequirements(@Param("id") id: string, @CurrentUser() user: AuthenticatedPrincipal) {
+    return this.service.getRequirements(id, user.userId);
   }
 
   @Put("sessions/:id/requirements")
-  updateRequirements(@Param("id") id: string, @Body() dto: UpdateRequirementsDto) {
-    return this.service.updateRequirements(id, dto);
+  updateRequirements(@Param("id") id: string, @Body() dto: UpdateRequirementsDto, @CurrentUser() user: AuthenticatedPrincipal) {
+    return this.service.updateRequirements(id, dto, user.userId);
   }
 }

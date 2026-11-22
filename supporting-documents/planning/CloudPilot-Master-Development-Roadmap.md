@@ -580,7 +580,7 @@ These are **not omissions that should be filled with imaginary certainty**:
 1. Finalized diagram package review: actual ERD keys/cardinalities, class responsibilities, transition diagrams and exact UML use-case mapping.
 2. AI provider/model/budget and strict structured output contract; mock adapter maintained regardless.
 3. ORM selection (Prisma proposed) and migrations ownership.
-4. Session/cookie/auth design, frontend/API domain setup and CSRF behavior.
+4. Frontend/API domain setup. CP-03 records the session/auth decision: PostgreSQL-backed opaque HttpOnly cookie sessions, hashed single-use recovery/verification tokens, server-side roles/ownership, and a session-bound CSRF token for state-changing browser requests. The deployment-specific frontend/API domain arrangement remains open.
 5. Stopped VM billing treatment; storage charges recommendation must become an explicit tested policy.
 6. Simulated payments vs manual records and when orders become confirmed, since source order states mention `PENDING_PAYMENT` but the semester excludes real settlement.
 7. Whether provider admin review is mandatory for certain policy thresholds and its effect on offer expiry.

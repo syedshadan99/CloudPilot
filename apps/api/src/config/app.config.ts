@@ -23,6 +23,18 @@ export interface AppConfig {
   };
   /** Allowed CORS origin for local development */
   corsOrigin: string;
+  session: {
+    ttlSeconds: number;
+    idleSeconds: number;
+    cookieName: string;
+    secure: boolean;
+    sameSite: "strict" | "lax" | "none";
+  };
+  csrfSecret: string;
+  passwordBcryptRounds: number;
+  verificationTokenTtlSeconds: number;
+  passwordResetTokenTtlSeconds: number;
+  emailDeliveryMode: "capture" | "disabled";
 }
 
 export const APP_CONFIG = Symbol("APP_CONFIG");
@@ -41,6 +53,18 @@ export const appConfigProvider: Provider = {
       password: configService.get("PGPASSWORD"),
     },
     corsOrigin: configService.get("CORS_ORIGIN"),
+    session: {
+      ttlSeconds: configService.get("SESSION_TTL_SECONDS"),
+      idleSeconds: configService.get("SESSION_IDLE_SECONDS"),
+      cookieName: configService.get("SESSION_COOKIE_NAME"),
+      secure: configService.get("SESSION_COOKIE_SECURE") === "true",
+      sameSite: configService.get("SESSION_COOKIE_SAME_SITE"),
+    },
+    csrfSecret: configService.get("CSRF_SECRET"),
+    passwordBcryptRounds: configService.get("PASSWORD_BCRYPT_ROUNDS"),
+    verificationTokenTtlSeconds: configService.get("VERIFICATION_TOKEN_TTL_SECONDS"),
+    passwordResetTokenTtlSeconds: configService.get("PASSWORD_RESET_TOKEN_TTL_SECONDS"),
+    emailDeliveryMode: configService.get("EMAIL_DELIVERY_MODE"),
   }),
   inject: [ConfigService],
 };
