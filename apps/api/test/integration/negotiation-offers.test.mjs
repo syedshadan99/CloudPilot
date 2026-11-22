@@ -23,10 +23,11 @@ test("all persisted offer money snapshots satisfy the database equation", async 
 });
 
 test("the actionable-offer uniqueness constraint rejects a second current proposal", async () => {
-  await pool.query("BEGIN");
+  const client = await pool.connect();
+  await client.query("BEGIN");
   try {
     await assert.rejects(
-      pool.query(`INSERT INTO offers
+      client.query(`INSERT INTO offers
         (customer_id, organization_id, chat_session_id, pricing_version_id, negotiation_policy_id,
          vm_template_id, vm_configuration, base_price, discount_percent, discount_amount, final_price,
          currency, billing_cycle, rental_duration_days, status, presented_at, expires_at)
@@ -37,7 +38,8 @@ test("the actionable-offer uniqueness constraint rejects a second current propos
       (error) => error.code === "23505",
     );
   } finally {
-    await pool.query("ROLLBACK");
+    await client.query("ROLLBACK");
+    client.release();
   }
 });
 

@@ -93,6 +93,9 @@ approved procedure. Do not run it against a shared or production database.
    `IF NOT EXISTS` clauses.
 3. Keep the migration transactional unless PostgreSQL requires a
    non-transactional operation; document that exception in the file and runbook.
-4. Never rewrite or delete an applied migration.
+4. Never rewrite or delete an applied migration. An un-applied duplicate file
+   may be removed from the runnable directory only when its functionality is
+   already provided by the canonical history and its Git history is preserved;
+   add any genuinely missing behavior as a new migration.
 5. Run fresh migration, repeat migration, seed twice, integration tests and
    the backend build before opening the PR.

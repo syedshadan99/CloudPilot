@@ -65,7 +65,7 @@ from their user because they are revocable credentials, not business history.
 | `vm_state_events` | VM state transition/event journal, including worker events with nullable actor. | FK VM RESTRICT and actor RESTRICT; expanded lifecycle/action checks; VM/time index. | Append-only operational history; prevents destructive cascade. |
 | `usage_records` | Immutable simulated metering interval and resource metrics. | VM FK RESTRICT; period-end check; GiST exclusion prevents same-VM overlap; period and uninvoiced indexes. | Stop/termination policy is applied by usage worker; invoiced rows retained. |
 | `vm_configuration_history` | Effective VM resource configuration versions. | FK VM/upgrade RESTRICT; unique `(vm_id,version_number)` and one-current partial index; effective date check. | Historical config remains after resize. |
-| `upgrade_requests` | Requested/approved/applied/failed VM resize with old/new configuration and price delta. | FKs customer/VM RESTRICT, reviewer SET NULL; state/timestamp checks; VM/status and customer indexes. | No current VM mutation before approved successful application. |
+| `upgrade_requests` | Requested/approved/applied/failed VM resize with previous/requested configuration, price delta, confirmation, retry and completion metadata. | FKs customer/VM RESTRICT, reviewer SET NULL; canonical lowercase state/timestamp checks; active-VM uniqueness; retry bounds. | `0010` adds retry and confirmation metadata without replacing the canonical Phase 1 table. No current VM mutation before approved successful application. |
 
 ## Notifications, support, audit and reliability
 

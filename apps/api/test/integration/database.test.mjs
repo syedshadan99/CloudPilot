@@ -24,9 +24,12 @@ async function expectConstraintError(query, values = []) {
 
 test("migration tracking and core tables are present", async () => {
   const migrationResult = await pool.query(
-    "SELECT count(*)::int AS count FROM schema_migrations WHERE version IN (1, 2, 3, 4)",
+    "SELECT version FROM schema_migrations WHERE version BETWEEN 1 AND 10 ORDER BY version",
   );
-  assert.equal(migrationResult.rows[0].count, 4);
+  assert.deepEqual(
+    migrationResult.rows.map((row) => row.version),
+    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+  );
 
   const requiredTables = [
     "users",
@@ -59,6 +62,19 @@ test("migration tracking and core tables are present", async () => {
   assert.deepEqual(
     result.rows.map((row) => row.table_name).sort(),
     [...requiredTables].sort(),
+  );
+
+  const upgradeColumns = await pool.query(`
+    SELECT column_name
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'upgrade_requests'
+      AND column_name = ANY($1::text[])
+    ORDER BY column_name
+  `, [["customer_confirmed_at", "attempt_count", "max_attempts", "last_error", "started_at", "completed_at"]]);
+  assert.deepEqual(
+    upgradeColumns.rows.map((row) => row.column_name),
+    ["attempt_count", "completed_at", "customer_confirmed_at", "last_error", "max_attempts", "started_at"],
   );
 });
 

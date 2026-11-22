@@ -1,19 +1,22 @@
 import { Transform } from "class-transformer";
-import { IsOptional, IsUUID, Matches, MaxLength } from "class-validator";
+import { IsOptional, Matches, MaxLength } from "class-validator";
 import { IsIn, IsInt, IsString, Max, Min } from "class-validator";
 import { BILLING_CYCLES } from "../../identity/identity.constants.js";
 import { RESOURCE_LIMITS, STORAGE_TYPES, SUPPORTED_OPERATING_SYSTEMS } from "../../catalog/catalog.constants.js";
 
 const decimalPattern = /^(?:0|[1-9]\d{0,14})(?:\.\d{1,4})?$/;
 const percentPattern = /^(?:0|[1-9]\d?)(?:\.\d{1,2})?$|^100(?:\.0{1,2})?$/;
+// PostgreSQL accepts UUID-shaped identifiers without requiring RFC version or
+// variant bits. The demo seed uses that valid PostgreSQL representation.
+const postgresUuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const trim = ({ value }: { value: unknown }) => typeof value === "string" ? value.trim() : value;
 
 export class StartNegotiationDto {
-  @IsUUID()
+  @Matches(postgresUuidPattern, { message: "chatSessionId must be a PostgreSQL UUID" })
   chatSessionId!: string;
 
-  @IsOptional() @IsUUID() templateId?: string;
-  @IsOptional() @IsUUID() organizationId?: string;
+  @IsOptional() @Matches(postgresUuidPattern, { message: "templateId must be a PostgreSQL UUID" }) templateId?: string;
+  @IsOptional() @Matches(postgresUuidPattern, { message: "organizationId must be a PostgreSQL UUID" }) organizationId?: string;
   @IsOptional() @IsInt() @Min(RESOURCE_LIMITS.cpuCores.min) @Max(RESOURCE_LIMITS.cpuCores.max) cpuCores?: number;
   @IsOptional() @IsInt() @Min(RESOURCE_LIMITS.ramGb.min) @Max(RESOURCE_LIMITS.ramGb.max) ramGb?: number;
   @IsOptional() @IsInt() @Min(RESOURCE_LIMITS.storageGb.min) @Max(RESOURCE_LIMITS.storageGb.max) storageGb?: number;
