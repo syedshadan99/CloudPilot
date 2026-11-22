@@ -9,8 +9,18 @@ The schema is SQL-first and uses opaque UUID identifiers, UTC `timestamptz`
 values, exact `numeric` financial amounts and explicit foreign keys. The
 existing `0001_chat.sql`–`0003_vms_and_usage.sql` migrations are preserved and
 completed by `0004_cloudpilot_foundation.sql` plus narrow corrective migrations
-`0005`–`0008`. Applied migrations are immutable and checksum-verified by
+`0005`–`0008`, with CP-05 migration `0009_negotiation_offer_lifecycle.sql` and
+the upgrade compatibility repair `0010_upgrade_requests_compatibility.sql`.
+Applied migrations are immutable and checksum-verified by
 `scripts/database.mjs`.
+
+The repository previously contained duplicate, incompatible teammate files
+named `0004_upgrade_requests.sql` and `0005_notifications_support_audit.sql`.
+The canonical `0004_cloudpilot_foundation.sql` already creates those tables, so
+the duplicates are no longer runnable migration files. Their Git history is
+preserved; no applied migration or checksum was changed. Migration `0010` adds
+only the retry and customer-confirmation columns required by the upgrade module
+and a canonical active-request index.
 
 ## Domain boundaries
 
@@ -37,6 +47,10 @@ completed by `0004_cloudpilot_foundation.sql` plus narrow corrective migrations
 - `idempotency_keys` and scoped unique constraints support safe retries for
   acceptance, invoice/payment commands, provisioning and billing jobs.
   `outbox_events` provides a transactional handoff to future worker consumers.
+- CP-05 adds durable negotiation attempts and normalized offer lineage. The
+  actionable-offer unique index prevents two current proposals for one chat
+  session, while `commercial_snapshot` preserves the policy/rule decision that
+  produced each offer.
 - `audit_logs` are append-only by application convention. Database roles for
   production append-only enforcement are not created by this phase; API and
   worker roles must deny ordinary update/delete access when deployment roles

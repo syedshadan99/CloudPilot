@@ -22,6 +22,9 @@ erDiagram
   USERS ||--o{ CHAT_SESSIONS : starts
   CHAT_SESSIONS ||--o{ CHAT_MESSAGES : contains
   CHAT_SESSIONS ||--o{ OFFERS : contextualizes
+  CHAT_SESSIONS ||--o{ NEGOTIATION_ATTEMPTS : counts
+  NEGOTIATION_ATTEMPTS ||--o| OFFERS : produces
+  OFFERS ||--o{ OFFERS : supersedes
   USERS ||--o{ OFFERS : receives
   OFFERS ||--o{ OFFER_EVENTS : records
   OFFERS ||--o{ OFFER_APPROVALS : reviews

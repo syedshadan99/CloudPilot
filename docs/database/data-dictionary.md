@@ -37,9 +37,10 @@ from their user because they are revocable credentials, not business history.
 
 | Table | Purpose and important columns | Keys, constraints and indexes | Ownership/lifecycle |
 | --- | --- | --- | --- |
-| `offers` | Negotiated configuration plus immutable pricing/policy references and price snapshot. | FKs customer/org/chat/pricing/policy/template; status/expiry/range checks; final = base - discount; customer/status, expiry and review indexes. | Customer-visible proposal; acceptance is explicit and time-bound. |
+| `offers` | Negotiated configuration plus immutable pricing/policy references, price snapshot, parent counteroffer and commercial decision snapshot. | FKs customer/org/chat/pricing/policy/template/parent/attempt; status/expiry/range checks; final = base - discount; one actionable offer per chat session; customer/status, expiry, review and lineage indexes. | Customer-visible proposal; a successor marks its parent `countered`; acceptance is explicit and time-bound. |
 | `offer_events` | Append-only offer status/event journal. | FK offer RESTRICT; nullable actor SET NULL; offer/time index. | Retained commercial history. |
 | `offer_approvals` | Provider review decision and reason. | FKs offer/reviewer RESTRICT; decision timestamp check; pending index. | Provider review trail; no customer authority escalation from client input. |
+| `negotiation_attempts` | Durable customer negotiation command, attempt number, request/decision snapshots, outcome and linked offer. | FKs chat/customer/offer; unique `(chat_session_id,attempt_number)`; bounded percentage/price; customer/session and offer indexes. | Counted per owned chat session; transport retries use idempotency and do not consume another attempt. |
 | `orders` | Accepted commercial commitment with configuration and price snapshot. | Unique FK `offer_id`; unique `order_number`; customer/org/pricing FKs; payment/provisioning gate checks; customer/status/eligibility indexes. | Only one order per offer; payment and provisioning remain separate states. |
 | `order_events` | Append-only order lifecycle journal. | FK order RESTRICT; optional actor SET NULL; order/time index. | Retained for recovery and audit reconstruction. |
 
@@ -64,7 +65,7 @@ from their user because they are revocable credentials, not business history.
 | `vm_state_events` | VM state transition/event journal, including worker events with nullable actor. | FK VM RESTRICT and actor RESTRICT; expanded lifecycle/action checks; VM/time index. | Append-only operational history; prevents destructive cascade. |
 | `usage_records` | Immutable simulated metering interval and resource metrics. | VM FK RESTRICT; period-end check; GiST exclusion prevents same-VM overlap; period and uninvoiced indexes. | Stop/termination policy is applied by usage worker; invoiced rows retained. |
 | `vm_configuration_history` | Effective VM resource configuration versions. | FK VM/upgrade RESTRICT; unique `(vm_id,version_number)` and one-current partial index; effective date check. | Historical config remains after resize. |
-| `upgrade_requests` | Requested/approved/applied/failed VM resize with old/new configuration and price delta. | FKs customer/VM RESTRICT, reviewer SET NULL; state/timestamp checks; VM/status and customer indexes. | No current VM mutation before approved successful application. |
+| `upgrade_requests` | Requested/approved/applied/failed VM resize with previous/requested configuration, price delta, confirmation, retry and completion metadata. | FKs customer/VM RESTRICT, reviewer SET NULL; canonical lowercase state/timestamp checks; active-VM uniqueness; retry bounds. | `0010` adds retry and confirmation metadata without replacing the canonical Phase 1 table. No current VM mutation before approved successful application. |
 
 ## Notifications, support, audit and reliability
 

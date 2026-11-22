@@ -4,6 +4,10 @@ This folder contains the SQL-first PostgreSQL source of truth for CloudPilot.
 
 - `migrations/` contains ordered, checksum-tracked schema changes.
 - `seeds/` contains deterministic local/demo data; it is never enabled for production.
+- CP-05 adds `0009_negotiation_offer_lifecycle.sql`. Migration-history repair adds
+  `0010_upgrade_requests_compatibility.sql`; duplicate un-applied teammate files
+  for versions 0004 and 0005 were removed from the runnable directory but remain
+  recoverable in Git history. Applied migrations are never edited.
 
 The migration and seed commands are implemented in `scripts/database.mjs`:
 
