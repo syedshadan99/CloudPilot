@@ -5,7 +5,8 @@ import {
   Param,
   Post,
 } from "@nestjs/common";
-import { Roles } from "../../common/decorators/index.js";
+import { CurrentUser, Roles } from "../../common/decorators/index.js";
+import type { AuthenticatedPrincipal } from "../../common/auth/authenticated-principal.js";
 import { ProvisioningService } from "./provisioning.service.js";
 import { CreateProvisioningJobDto } from "./dto/index.js";
 
@@ -27,17 +28,17 @@ export class ProvisioningController {
   constructor(private readonly service: ProvisioningService) {}
 
   @Post("jobs")
-  createJob(@Body() dto: CreateProvisioningJobDto) {
-    return this.service.createJob(dto);
+  createJob(@CurrentUser() user: AuthenticatedPrincipal, @Body() dto: CreateProvisioningJobDto) {
+    return this.service.createJob(user, dto);
   }
 
   @Get("jobs/:id")
-  getJob(@Param("id") id: string) {
-    return this.service.getJobById(id);
+  getJob(@CurrentUser() user: AuthenticatedPrincipal, @Param("id") id: string) {
+    return this.service.getJobById(user, id);
   }
 
   @Get("orders/:orderId")
-  getByOrder(@Param("orderId") orderId: string) {
-    return this.service.getJobByOrder(orderId);
+  getByOrder(@CurrentUser() user: AuthenticatedPrincipal, @Param("orderId") orderId: string) {
+    return this.service.getJobByOrder(user, orderId);
   }
 }

@@ -8,9 +8,9 @@
 | CP-11 chat persistence and controlled AI boundary | `chat_sessions`, `chat_messages`, `vm_requirements`, offer linkage | `0001`, `0004` | Existing chat compatibility; FK and sequence constraints |
 | First-demo workflow steps 2–3; P7 offers | `offers`, `offer_events`, `offer_approvals` | `0004` | Price equation, status/expiry checks; accepted/review examples |
 | CP-05 deterministic negotiation | `negotiation_attempts`, `offers.parent_offer_id`, `offers.commercial_snapshot`, actionable-offer unique index | `0009` | Unit engine/state tests; transactional attempt/lineage/expiry/provider-review checks |
-| First-demo workflow step 3; P8 order confirmation | `orders`, `order_events`, unique offer/order mapping, `idempotency_keys` | `0004`, `0005` | Duplicate order/invoice uniqueness and gate test |
+| First-demo workflow step 3; CP-06 order confirmation | `orders`, `order_events`, unique offer/order mapping, `idempotency_keys`, `capacity_reservations`, `outbox_events` | `0004`, `0005` | Atomic acceptance, held-capacity, rollback, replay and concurrency tests |
 | First-demo workflow step 3; P10 billing | `billing_accounts`, `invoices`, `invoice_items`, `invoice_adjustments`, `charge_ledger_entries` | `0004`, `0006` | Invoice line reconciliation and exact numeric totals |
-| First-demo workflow steps 4–5; simulated payment gate | `payment_records`, order payment/provisioning timestamps | `0004` | Payment-gated state query; unique verified order payment |
+| First-demo workflow steps 4–5; CP-06 simulated payment gate | `payment_records`, order payment/provisioning timestamps, invoice settlement | `0004` | Exact full-payment, currency, duplicate, ownership and provisioning-gate tests |
 | P8 durable provisioning and CP-12 worker | `provisioning_jobs`, `job_attempts`, `outbox_events` | `0002`, `0004` | Migration tracking; one job/order; ready/failure jobs |
 | P9 VM lifecycle and usage; CP-13 | `virtual_machines`, `vm_state_events`, `usage_records` | `0003`, `0004`, `0007`, `0008` | VM ownership, state/action checks, overlap rejection |
 | P11 upgrade/downgrade and resize recovery | `upgrade_requests`, `vm_configuration_history` | `0004` | One current configuration; applied history |

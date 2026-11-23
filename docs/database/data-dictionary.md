@@ -41,7 +41,7 @@ from their user because they are revocable credentials, not business history.
 | `offer_events` | Append-only offer status/event journal. | FK offer RESTRICT; nullable actor SET NULL; offer/time index. | Retained commercial history. |
 | `offer_approvals` | Provider review decision and reason. | FKs offer/reviewer RESTRICT; decision timestamp check; pending index. | Provider review trail; no customer authority escalation from client input. |
 | `negotiation_attempts` | Durable customer negotiation command, attempt number, request/decision snapshots, outcome and linked offer. | FKs chat/customer/offer; unique `(chat_session_id,attempt_number)`; bounded percentage/price; customer/session and offer indexes. | Counted per owned chat session; transport retries use idempotency and do not consume another attempt. |
-| `orders` | Accepted commercial commitment with configuration and price snapshot. | Unique FK `offer_id`; unique `order_number`; customer/org/pricing FKs; payment/provisioning gate checks; customer/status/eligibility indexes. | Only one order per offer; payment and provisioning remain separate states. |
+| `orders` | Accepted commercial commitment with configuration and price snapshot. | Unique FK `offer_id`; unique `order_number`; customer/org/pricing FKs; payment/provisioning gate checks; customer/status/eligibility indexes. | Only one order per offer; CP-06 creates `pending_payment`, then payment verification—not acceptance—advances the gate. |
 | `order_events` | Append-only order lifecycle journal. | FK order RESTRICT; optional actor SET NULL; order/time index. | Retained for recovery and audit reconstruction. |
 
 ## Billing and payment
@@ -49,9 +49,9 @@ from their user because they are revocable credentials, not business history.
 | Table | Purpose and important columns | Keys, constraints and indexes | Ownership/lifecycle |
 | --- | --- | --- | --- |
 | `billing_accounts` | Per-customer currency, balance and billing status. | Unique customer FK RESTRICT; balance/currency/status checks. | Suspended accounts block new provisioning in application policy. |
-| `invoices` | Initial, recurring or adjustment invoice header and exact totals. | Unique invoice number; FKs account/customer/order RESTRICT; initial-order partial unique index; total equation/period checks; customer/status/due/order indexes. | Financial history retained; recurring invoices may omit order. |
+| `invoices` | Initial, recurring or adjustment invoice header and exact totals. | Unique invoice number; FKs account/customer/order RESTRICT; initial-order partial unique index; total equation/period checks; customer/status/due/order indexes. | CP-06 issues one initial invoice in the acceptance transaction with zero tax/adjustments; recurring invoices may omit order. |
 | `invoice_items` | Itemized setup/compute/storage/discount/tax/credit/adjustment lines. | FK invoice RESTRICT; unique line number per invoice; invoice order index. | Reconciliation detail; backend calculates amount. |
-| `payment_records` | Simulated payment submission, verification, reversal and reference. | FKs invoice/order/customer RESTRICT; unique payment reference; verified-per-order partial unique index; status timestamp checks; invoice/status index. | No real payment credentials or settlement claims. |
+| `payment_records` | Simulated payment submission, verification, reversal and reference. | FKs invoice/order/customer RESTRICT; unique payment reference; verified-per-order partial unique index; status timestamp checks; invoice/status index. | CP-06 permits one exact full simulated payment; partial accumulation and zero-value settlement are deferred. No real payment credentials or settlement claims. |
 | `invoice_adjustments` | Authorized signed credit/debit/refund/tax correction. | FK invoice/authorizer RESTRICT; nonzero signed amount; invoice/time index. | Explicit reason and authorization required. |
 | `charge_ledger_entries` | Immutable usage/setup charge source with quantity, rate, amount and billing interval. | Unique idempotency key; usage/VM/invoice FKs RESTRICT; period and nonnegative quantity/rate checks; customer/period and invoice indexes. | Source for invoice lines and reconciliation. |
 
@@ -76,7 +76,7 @@ from their user because they are revocable credentials, not business history.
 | `support_tickets` | Customer support case, assignment, priority and related business records. | Customer/assignment/related FKs; customer/status and assignment indexes. | Customer sees own records; staff visibility is guarded by role. |
 | `support_messages` | Customer-visible replies and internal notes. | Ticket/author FKs RESTRICT; visibility check; ticket/time index. | `visibility='internal'` must never be returned to customers. |
 | `audit_logs` | Actor, organization, action, entity, safe old/new metadata, reason and request correlation. | Actor/org SET NULL; entity, actor and organization/time indexes. | Append-only application contract; never include secrets. |
-| `idempotency_keys` | Scoped request hash, result and resource reference for repeat-safe commands. | Unique `(scope,idempotency_key)`; lifecycle/status checks; expiry index. | Scope must include actor or aggregate identity. |
+| `idempotency_keys` | Scoped request hash, result and resource reference for repeat-safe commands. | Unique `(scope,idempotency_key)`; lifecycle/status checks; expiry index. | CP-06 scopes acceptance/payment keys by customer and aggregate; mismatched reuse is rejected and committed responses are replayed. |
 | `outbox_events` | Transactionally stored event payload for future async consumers. | Optional unique deduplication key; queue index; status/attempt checks. | Publisher claims rows and records failures; payloads contain no secrets. |
 
 ## Existing compatibility tables

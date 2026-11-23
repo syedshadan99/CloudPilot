@@ -6,6 +6,9 @@ import {
   Logger,
   NotFoundException,
 } from "@nestjs/common";
+import type { AuthenticatedPrincipal } from "../../common/auth/authenticated-principal.js";
+import { DatabaseService } from "../../database/database.service.js";
+import { AuthorizationService } from "../identity/services/authorization.service.js";
 import { ProvisioningRepository } from "./provisioning.repository.js";
 import { VM_PROVIDER, type VirtualMachineProvider } from "./adapters/index.js";
 import type { CreateProvisioningJobDto } from "./dto/index.js";
@@ -17,6 +20,8 @@ export class ProvisioningService {
   constructor(
     private readonly repo: ProvisioningRepository,
     @Inject(VM_PROVIDER) private readonly vmProvider: VirtualMachineProvider,
+    private readonly db: DatabaseService,
+    private readonly authorization: AuthorizationService,
   ) {}
 
   // ── Job creation ─────────────────────────────────────────────────────────
@@ -26,12 +31,19 @@ export class ProvisioningService {
    *
    * Rules enforced:
    *  1. Payment must be verified before provisioning can start.
-   *     (Stub until CP-06 delivers payment_records table.)
    *  2. Simulated capacity must be available.
    *  3. UNIQUE(order_id) on the DB table makes this idempotent —
    *     repeated calls return the existing job without creating duplicates.
    */
-  async createJob(dto: CreateProvisioningJobDto) {
+  async createJob(user: AuthenticatedPrincipal, dto: CreateProvisioningJobDto) {
+    const orderResult = await this.db.query<{ id: string; customer_id: string; organization_id: string; vm_configuration: Record<string, unknown>; status: string }>(
+      `SELECT id, customer_id, organization_id, vm_configuration, status FROM orders WHERE id = $1`,
+      [dto.orderId],
+    );
+    const order = orderResult.rows[0];
+    if (!order) throw new NotFoundException("Order not found");
+    await this.authorization.assertOrganizationMember(user.userId, order.organization_id);
+
     // ── 1. Payment gate ───────────────────────────────────────────────────
     const paymentVerified = await this.isPaymentVerified(dto.orderId);
     if (!paymentVerified) {
@@ -42,7 +54,8 @@ export class ProvisioningService {
     }
 
     // ── 2. Capacity check ─────────────────────────────────────────────────
-    const capacity = await this.vmProvider.checkCapacity(dto.vmConfig);
+    const vmConfig = this.toProviderConfig(order.vm_configuration);
+    const capacity = await this.vmProvider.checkCapacity(vmConfig);
     if (!capacity.available) {
       throw new BadRequestException(
         `Insufficient capacity: ${capacity.reason ?? "no capacity available"}`,
@@ -50,7 +63,8 @@ export class ProvisioningService {
     }
 
     // ── 3. Create (idempotent) ────────────────────────────────────────────
-    const job = await this.repo.createJob(dto.orderId, dto.customerId, dto.vmConfig);
+    const job = await this.repo.createJob(order.id, order.customer_id, vmConfig);
+    await this.db.query(`UPDATE orders SET status = CASE WHEN status = 'payment_verified' THEN 'provisioning' ELSE status END, updated_at = NOW() WHERE id = $1`, [order.id]);
 
     this.logger.log(
       `Provisioning job ${job.id} created for order ${dto.orderId} (status: ${job.status})`,
@@ -60,16 +74,18 @@ export class ProvisioningService {
 
   // ── Status / progress ────────────────────────────────────────────────────
 
-  async getJobByOrder(orderId: string) {
+  async getJobByOrder(user: AuthenticatedPrincipal, orderId: string) {
+    await this.assertProviderOrderAccess(user, orderId);
     const job = await this.repo.findByOrderId(orderId);
     if (!job) throw new NotFoundException(`No provisioning job found for order ${orderId}`);
     const attempts = await this.repo.listAttempts(job.id);
     return { job, attempts };
   }
 
-  async getJobById(jobId: string) {
+  async getJobById(user: AuthenticatedPrincipal, jobId: string) {
     const job = await this.repo.findById(jobId);
     if (!job) throw new NotFoundException(`Provisioning job ${jobId} not found`);
+    await this.assertProviderOrderAccess(user, job.order_id);
     const attempts = await this.repo.listAttempts(jobId);
     return { job, attempts };
   }
@@ -93,6 +109,12 @@ export class ProvisioningService {
 
     const attemptNumber = job.attempt_count + 1;
     this.logger.log(`Running job ${jobId} (attempt ${attemptNumber}/${job.max_attempts})`);
+
+    if (!(await this.isPaymentVerified(job.order_id))) {
+      await this.repo.updateStatus(jobId, "CANCELLED", { last_error: "Authoritative payment gate failed before provider allocation", completed_at: new Date() });
+      this.logger.warn(`Job ${jobId} cancelled because the order is no longer payment-verified`);
+      return;
+    }
 
     // Mark as ALLOCATING + record start time
     await this.repo.updateStatus(jobId, "ALLOCATING", { started_at: new Date() });
@@ -143,19 +165,49 @@ export class ProvisioningService {
   /**
    * Verifies that payment for the order is confirmed before provisioning.
    *
-   * TODO CP-06: Replace the stub with a real query once the payment_records
-   * table exists:
+   * This check is database-backed and repeated immediately before provider allocation:
    *   SELECT EXISTS(
    *     SELECT 1 FROM payment_records
    *     WHERE order_id = $orderId AND status = 'VERIFIED'
    *   )
    *
-   * The stub returns true so the provisioning worker can be developed and
-   * tested end-to-end without the payment module being complete.
    */
-  private async isPaymentVerified(_orderId: string): Promise<boolean> {
-    // STUB — always returns true during development.
-    // Replace with real DB check when CP-06 is merged.
-    return true;
+  private async isPaymentVerified(orderId: string): Promise<boolean> {
+    const result = await this.db.query<{ eligible: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1
+         FROM orders o
+         JOIN invoices i ON i.order_id = o.id AND i.invoice_type = 'initial_order'
+         JOIN payment_records p ON p.invoice_id = i.id AND p.order_id = o.id AND p.status = 'verified'
+         JOIN capacity_reservations r ON r.order_id = o.id AND r.status = 'committed'
+         WHERE o.id = $1
+           AND o.status IN ('payment_verified','provisioning','provisioning_failed','active','suspended','completed')
+           AND o.payment_verified_at IS NOT NULL
+           AND o.provisioning_eligible_at IS NOT NULL
+           AND i.status = 'paid'
+           AND i.amount_paid = i.total
+           AND p.amount = i.total
+           AND p.currency = i.currency
+       ) AS eligible`,
+      [orderId],
+    );
+    return result.rows[0]?.eligible === true;
+  }
+
+  private toProviderConfig(config: Record<string, unknown>) {
+    const vmConfig = {
+      cpuCores: Number(config.cpuCores ?? config.cpu_cores),
+      ramGb: Number(config.ramGb ?? config.ram_gb),
+      storageGb: Number(config.storageGb ?? config.storage_gb),
+      os: String(config.operatingSystem ?? config.operating_system ?? ""),
+    };
+    if (![vmConfig.cpuCores, vmConfig.ramGb, vmConfig.storageGb].every((value) => Number.isInteger(value) && value > 0) || !vmConfig.os) throw new BadRequestException("Persisted order VM configuration is invalid");
+    return vmConfig;
+  }
+
+  private async assertProviderOrderAccess(user: AuthenticatedPrincipal, orderId: string): Promise<void> {
+    const result = await this.db.query<{ organization_id: string }>(`SELECT organization_id FROM orders WHERE id = $1`, [orderId]);
+    if (!result.rows[0]) throw new NotFoundException("Order not found");
+    await this.authorization.assertOrganizationMember(user.userId, result.rows[0].organization_id);
   }
 }
