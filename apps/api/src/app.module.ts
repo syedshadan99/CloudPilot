@@ -17,6 +17,9 @@ import { SupportModule } from "./modules/support/support.module.js";
 import { AuditModule } from "./modules/audit/audit.module.js";
 import { NegotiationModule } from "./modules/negotiation/negotiation.module.js";
 import { OffersModule } from "./modules/offers/offers.module.js";
+import { OrdersModule } from "./modules/orders/orders.module.js";
+import { BillingModule } from "./modules/billing/billing.module.js";
+import { PaymentsModule } from "./modules/payments/payments.module.js";
 
 @Module({
   imports: [
@@ -38,6 +41,9 @@ import { OffersModule } from "./modules/offers/offers.module.js";
     AuditModule,
     NegotiationModule,
     OffersModule,
+    OrdersModule,
+    BillingModule,
+    PaymentsModule,
   ],
 })
 export class AppModule {}

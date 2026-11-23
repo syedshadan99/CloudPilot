@@ -4,10 +4,10 @@ export type OfferStatus = "draft" | "presented" | "countered" | "pending_provide
 
 const transitions: Record<OfferStatus, readonly OfferStatus[]> = {
   draft: ["presented", "pending_provider_review", "cancelled"],
-  presented: ["countered", "declined", "expired", "cancelled"],
+  presented: ["countered", "declined", "accepted", "expired", "cancelled"],
   countered: [],
   pending_provider_review: ["approved", "rejected", "expired", "cancelled", "countered"],
-  approved: ["countered", "declined", "expired", "cancelled"],
+  approved: ["countered", "declined", "accepted", "expired", "cancelled"],
   accepted: [],
   declined: [],
   expired: [],

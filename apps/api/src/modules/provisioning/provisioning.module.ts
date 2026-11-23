@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { DatabaseModule } from "../../database/database.module.js";
+import { IdentityModule } from "../identity/identity.module.js";
 import { ProvisioningController } from "./provisioning.controller.js";
 import { ProvisioningService } from "./provisioning.service.js";
 import { ProvisioningRepository } from "./provisioning.repository.js";
@@ -7,7 +8,7 @@ import { VM_PROVIDER } from "./adapters/index.js";
 import { SimulatedVmProvider } from "./adapters/simulated-vm.provider.js";
 
 @Module({
-  imports: [DatabaseModule],
+  imports: [DatabaseModule, IdentityModule],
   controllers: [ProvisioningController],
   providers: [
     ProvisioningService,

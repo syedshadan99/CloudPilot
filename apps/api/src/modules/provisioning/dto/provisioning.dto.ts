@@ -27,12 +27,6 @@ export class VmConfigDto {
 export class CreateProvisioningJobDto {
   @IsUUID()
   orderId!: string;
-
-  @IsUUID()
-  customerId!: string;
-
-  @IsObject()
-  vmConfig!: VmConfigDto;
 }
 
 export class RetryJobDto {
