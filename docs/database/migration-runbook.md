@@ -99,3 +99,8 @@ approved procedure. Do not run it against a shared or production database.
    add any genuinely missing behavior as a new migration.
 5. Run fresh migration, repeat migration, seed twice, integration tests and
    the backend build before opening the PR.
+
+CP-07 uses `0011_cp07_billing_periods.sql`. It is additive, preserves the
+applied `0001`-`0010` checksums, and adds the durable recurring-period key,
+usage rating timestamp, and deterministic ledger source key. Confirm it with
+`npm run db:status` before running billing integration tests.

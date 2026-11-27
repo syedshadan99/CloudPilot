@@ -32,11 +32,16 @@ export class UsageRepository {
     const m = generateUsageMetrics(vmId, periodStart);
     const r = await this.db.query<UsageRecordRow>(
       `INSERT INTO usage_records
-         (vm_id, period_start, period_end,
+         (vm_id, period_start, period_end, runtime_seconds,
           cpu_percent, ram_percent,
           disk_read_mb, disk_write_mb,
           net_in_mb, net_out_mb)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       SELECT $1,$2,$3,
+              CASE WHEN vm.state = 'RUNNING' AND (vm.started_at IS NULL OR vm.started_at < $3)
+                   THEN GREATEST(0, LEAST(3600, EXTRACT(EPOCH FROM ($3::timestamptz - GREATEST($2::timestamptz, COALESCE(vm.started_at, $2::timestamptz)))))::bigint)
+                   ELSE 0 END,
+              $4,$5,$6,$7,$8,$9
+         FROM virtual_machines vm WHERE vm.id = $1
        ON CONFLICT (vm_id, period_start) DO NOTHING
        RETURNING *`,
       [
