@@ -32,3 +32,5 @@
 The supplied academic ERD remains preserved. CP-02 extends it with the tables
 needed for the explicit payment-before-provisioning workflow and safe retries;
 the rationale is recorded in `decisions.md`.
+
+CP-07 usage-ledger billing and repeat-safe recurring invoices are implemented by `0011_cp07_billing_periods.sql`, the billing rating engine, and the PostgreSQL-backed billing worker. Verification is covered by the CP-07 unit/integration tests and runbook.

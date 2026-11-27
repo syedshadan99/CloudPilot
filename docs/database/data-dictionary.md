@@ -85,3 +85,7 @@ The original migrations also retain the original `vm_config`, `cpu_percent`,
 `ram_percent`, disk and network metric columns. They are intentionally not
 duplicated. The migration runner records filename/checksum/execution time in
 `schema_migrations`.
+
+## CP-07 billing additions
+
+`billing_periods` is the durable recurring-invoice identity: customer, billing-account currency, billing cycle, and half-open timestamps are unique. `charge_ledger_entries.source_key` is the deterministic source-level idempotency key. `usage_records.rated_at` distinguishes unrated evidence from atomically rated evidence; `invoiced_at` and `charge_ledger_id` preserve the first-release composite-charge relationship.

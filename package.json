@@ -13,11 +13,12 @@
     "db:status": "node scripts/database.mjs status",
     "db:seed": "node scripts/database.mjs seed",
     "db:reset": "node scripts/database.mjs reset",
-    "test:database": "node --test apps/api/test/integration/database.test.mjs apps/api/test/integration/identity-password.test.mjs apps/api/test/integration/catalog-pricing.test.mjs apps/api/test/integration/negotiation-offers.test.mjs apps/api/test/integration/orders-payments.test.mjs",
+    "test:database": "node --test apps/api/test/integration/database.test.mjs apps/api/test/integration/identity-password.test.mjs apps/api/test/integration/catalog-pricing.test.mjs apps/api/test/integration/negotiation-offers.test.mjs apps/api/test/integration/orders-payments.test.mjs apps/api/test/integration/billing.test.mjs",
     "test:unit": "npm run build --workspace @cloudpilot/api && node --test apps/api/test/unit/*.test.mjs",
     "test:e2e": "node --test apps/api/test/e2e/*.test.mjs",
     "test:phase4": "npm run build --workspace @cloudpilot/api && node --test apps/api/test/unit/negotiation-offers.test.mjs apps/api/test/integration/negotiation-offers.test.mjs apps/api/test/e2e/negotiation-offers.e2e.test.mjs",
-    "test:phase5": "npm run build --workspace @cloudpilot/api && node --test apps/api/test/unit/orders-payments.test.mjs apps/api/test/integration/orders-payments.test.mjs apps/api/test/e2e/orders-payments.e2e.test.mjs"
+    "test:phase5": "npm run build --workspace @cloudpilot/api && node --test apps/api/test/unit/orders-payments.test.mjs apps/api/test/integration/orders-payments.test.mjs apps/api/test/e2e/orders-payments.e2e.test.mjs",
+    "test:phase6": "npm run build --workspace @cloudpilot/api && node --test apps/api/test/unit/billing.test.mjs apps/api/test/integration/billing.test.mjs"
   },
   "devDependencies": {
     "typescript": "~6.0.0"

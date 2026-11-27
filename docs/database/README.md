@@ -94,3 +94,8 @@ following transactions:
 API authorization and customer/organization filtering remain application
 responsibilities. The schema makes those filters explicit and indexable; it
 does not claim to replace NestJS guards.
+
+CP-07 adds `billing_periods`, source-level ledger idempotency, and usage rating
+state in migration `0011_cp07_billing_periods.sql`. The initial CP-06 invoice
+remains prepaid coverage; recurring rating only considers runtime after that
+boundary and uses fixed 30-day months.

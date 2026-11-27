@@ -5,7 +5,7 @@ import { AuditService } from "../../common/audit/audit.service.js";
 import { DatabaseService } from "../../database/database.service.js";
 import { NegotiationRepository } from "../negotiation/negotiation.repository.js";
 import { parseMoney } from "../pricing/services/money.js";
-import type { SimulatedPaymentDto } from "./dto/payments.dto.js";
+import type { PaymentListQueryDto, SimulatedPaymentDto } from "./dto/payments.dto.js";
 import { evaluateSimulatedPayment } from "./payment-rules.js";
 
 @Injectable()
@@ -79,6 +79,16 @@ export class PaymentsService {
   async listForInvoice(user: AuthenticatedPrincipal, invoiceId: string) {
     const result = await this.db.query(`SELECT p.id, p.invoice_id, p.order_id, p.payment_reference, p.provider, p.amount, p.currency, p.status, p.failure_reason, p.submitted_at, p.verified_at FROM payment_records p JOIN invoices i ON i.id = p.invoice_id WHERE p.invoice_id = $1 AND p.customer_id = $2 AND i.customer_id = $2 ORDER BY p.created_at ASC`, [invoiceId, user.userId]);
     return { data: result.rows };
+  }
+
+  async listForCustomer(user: AuthenticatedPrincipal, query: PaymentListQueryDto) {
+    const where = ["p.customer_id = $1"]; const values: unknown[] = [user.userId];
+    if (query.status) { values.push(query.status); where.push(`p.status = $${values.length}`); }
+    if (query.invoiceId) { values.push(query.invoiceId); where.push(`p.invoice_id = $${values.length}`); }
+    const count = await this.db.query<{ count: string }>(`SELECT count(*)::text AS count FROM payment_records p WHERE ${where.join(" AND ")}`, values);
+    values.push(query.pageSize, (query.page - 1) * query.pageSize);
+    const result = await this.db.query(`SELECT p.id,p.invoice_id,p.order_id,p.payment_reference,p.provider,p.amount,p.currency,p.status,p.failure_reason,p.submitted_at,p.verified_at,p.reversed_at,p.created_at FROM payment_records p WHERE ${where.join(" AND ")} ORDER BY p.submitted_at DESC,p.id DESC LIMIT $${values.length - 1} OFFSET $${values.length}`, values);
+    return { data: result.rows, pagination: { page: query.page, pageSize: query.pageSize, total: Number(count.rows[0]?.count ?? 0) } };
   }
 
   private paymentResponse(payment: Record<string, any>, invoice: Record<string, any>, order: Record<string, any>) {

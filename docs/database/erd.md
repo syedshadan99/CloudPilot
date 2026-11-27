@@ -74,3 +74,7 @@ erDiagram
 The diagrams are intentionally domain-level. The full physical column and
 foreign-key inventory is in the data dictionary, while the actual SQL remains
 authoritative in `database/migrations/`.
+
+The CP-07 physical additions are `billing_periods` and the `rated_at` and
+`source_key` fields. `billing_periods.invoice_id` links one canonical recurring
+period to one invoice; usage evidence links to a composite compute ledger row.
