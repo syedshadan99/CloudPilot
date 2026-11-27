@@ -308,8 +308,10 @@ export class IdentityRepository {
 
   async findMembership(userId: string, organizationId: string): Promise<{ member_role: string } | undefined> {
     const result = await this.db.query<{ member_role: string }>(
-      `SELECT member_role FROM organization_members
-       WHERE user_id = $1 AND organization_id = $2`,
+      `SELECT om.member_role FROM organization_members om
+       JOIN organizations o ON o.id = om.organization_id AND o.status = 'active'
+       JOIN users u ON u.id = om.user_id AND u.status = 'active'
+       WHERE om.user_id = $1 AND om.organization_id = $2`,
       [userId, organizationId],
     );
     return result.rows[0];
