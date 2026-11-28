@@ -11,8 +11,12 @@ import type { AuthenticatedPrincipal } from "../../common/auth/authenticated-pri
 import { AuditService } from "../../common/audit/audit.service.js";
 import { DatabaseService } from "../../database/database.service.js";
 import { AuthorizationService } from "../identity/services/authorization.service.js";
-import { formatMoney, applyPercent, parseMoney } from "../pricing/services/money.js";
+import { PricingRepository } from "../pricing/repositories/pricing.repository.js";
+import { formatMoney, parseMoney } from "../pricing/services/money.js";
+import { evaluateNegotiation } from "../negotiation/negotiation-engine.js";
+import { assertOfferTransition } from "../offers/offer-state-machine.js";
 import type { ProviderOverrideDto, ProviderReportQueryDto } from "./dto/provider.dto.js";
+import { validateProviderReportWindow } from "./report-window.js";
 import { ProviderRepository } from "./provider.repository.js";
 
 @Injectable()
@@ -22,6 +26,7 @@ export class ProviderService {
     private readonly authorization: AuthorizationService,
     private readonly db: DatabaseService,
     private readonly audit: AuditService,
+    private readonly pricing: PricingRepository,
   ) {}
 
   async dashboard(user: AuthenticatedPrincipal, query: ProviderReportQueryDto) {
@@ -30,7 +35,7 @@ export class ProviderService {
     const [counts, finances, activity] = await Promise.all([
       this.repo.dashboardCounts(query.organizationId, query),
       this.repo.financialSummary(query.organizationId, query),
-      this.repo.activity(query.organizationId, 10),
+      this.repo.activity(query.organizationId, query, 1, 10),
     ]);
     return {
       organizationId: query.organizationId,
@@ -46,10 +51,10 @@ export class ProviderService {
         averageAcceptedDiscountPercent: counts.average_accepted_discount,
       },
       financialsByCurrency: finances,
-      recentActivity: activity,
+      recentActivity: activity.rows,
       window: this.windowResponse(query),
       limitations: [
-        "Financial totals are grouped by currency and use provider-attributed invoice components.",
+        "Financial totals are grouped by currency and use provider-attributed invoice components; void invoices contribute zero financial amounts.",
         "Verified simulated payments are reported only for invoices attributable to one provider; shared recurring invoices are not assigned payment settlement to a provider.",
         "Margin estimates are unavailable because no approved provider cost basis exists.",
       ],
@@ -112,8 +117,8 @@ export class ProviderService {
       data: result.rows,
       pagination: this.pagination(query, result.total),
       financialSemantics: {
-        providerAmount: "Initial invoices use the order snapshot. Recurring invoices use their provider-owned charge lines.",
-        outstandingAmount: "For shared recurring invoices, the outstanding header balance is allocated proportionally to provider charge lines.",
+        providerAmount: "Initial and single-provider invoices use the attributable invoice header. Shared recurring invoice totals, including persisted adjustments, are allocated proportionally to provider-owned charge lines.",
+        outstandingAmount: "For shared recurring invoices, the outstanding header balance is allocated proportionally to provider charge lines; void and uncollectible balances are not receivables.",
         verifiedSimulatedPayments: "Shared invoices return zero provider payment allocation because payment settlement allocation is not persisted.",
       },
     };
@@ -134,7 +139,9 @@ export class ProviderService {
 
   async activity(user: AuthenticatedPrincipal, query: ProviderReportQueryDto) {
     await this.assertMember(user, query.organizationId);
-    return { data: await this.repo.activity(query.organizationId, query.pageSize), pagination: { page: 1, pageSize: query.pageSize, total: query.pageSize } };
+    this.validateWindow(query);
+    const result = await this.repo.activity(query.organizationId, query, query.page, query.pageSize);
+    return { data: result.rows, pagination: this.pagination(query, result.total) };
   }
 
   /**
@@ -147,7 +154,9 @@ export class ProviderService {
     await this.assertAdmin(user, organizationId);
     const key = idempotencyKey.trim();
     if (key.length < 8 || key.length > 200) throw new ConflictException("A valid Idempotency-Key header is required");
-    const requestHash = createHash("sha256").update(JSON.stringify({ organizationId, offerId, discountPercent: dto.discountPercent, reason: dto.reason })).digest("hex");
+    const reason = dto.reason.trim();
+    if (!reason) throw new BadRequestException("A nonempty override reason is required");
+    const requestHash = createHash("sha256").update(JSON.stringify({ organizationId, offerId, discountPercent: dto.discountPercent, reason })).digest("hex");
     return this.db.transaction(async (client) => {
       const scope = `provider:override:${organizationId}:${offerId}`;
       await client.query(
@@ -158,25 +167,34 @@ export class ProviderService {
       if (idem.request_hash !== requestHash) throw new ConflictException("Idempotency key was already used with different request data");
       if (idem.status === "succeeded") return idem.response_body;
 
+      const source = (await client.query<{ chat_session_id: string }>(
+        `SELECT chat_session_id FROM offers WHERE id = $1 AND organization_id = $2`, [offerId, organizationId])).rows[0];
+      if (!source) throw new NotFoundException("Deal not found");
+      const session = (await client.query<{ active_offer_id: string | null }>(
+        `SELECT active_offer_id FROM chat_sessions WHERE id = $1 FOR UPDATE`, [source.chat_session_id])).rows[0];
+      if (!session) throw new NotFoundException("Negotiation session not found");
+      if (session.active_offer_id && session.active_offer_id !== offerId) throw new ConflictException("The deal is no longer the active negotiation proposal");
       const original = (await client.query<Record<string, unknown>>(
         `SELECT * FROM offers WHERE id = $1 AND organization_id = $2 FOR UPDATE`, [offerId, organizationId])).rows[0];
       if (!original) throw new NotFoundException("Deal not found");
       if (original.status !== "pending_provider_review") throw new ConflictException("Only pending provider-review deals can be overridden");
       if (original.expires_at && new Date(String(original.expires_at)) <= new Date()) throw new ConflictException("Expired deals cannot be overridden");
 
-      const policy = (await client.query<{ maximum_discount_percent: string; minimum_price: string }>(
-        `SELECT maximum_discount_percent, minimum_price FROM negotiation_policies WHERE id = $1 AND organization_id = $2`, [original.negotiation_policy_id, organizationId])).rows[0];
-      if (!policy) throw new ConflictException("The deal policy is unavailable");
-      const percent = percentBasisPoints(dto.discountPercent);
-      if (percent > percentBasisPoints(policy.maximum_discount_percent)) throw new ConflictException("Override exceeds the negotiation policy discount limit");
-      const base = parseMoney(String(original.base_price));
-      const discount = applyPercent(base, percent);
-      const finalPrice = base - discount;
-      if (finalPrice < parseMoney(policy.minimum_price)) throw new ConflictException("Override is below the negotiation policy minimum price");
+      const version = await this.pricing.findVersion(String(original.pricing_version_id), organizationId, client);
+      const policy = await this.pricing.findPolicy(String(original.negotiation_policy_id), organizationId, client);
+      if (!version || !policy) throw new ConflictException("The historical pricing or negotiation policy is unavailable");
+      if (version.version.currency !== String(original.currency)) throw new ConflictException("The offer currency does not match its pricing version");
+      const rules = version.rules.filter((rule) => rule.vm_template_id === original.vm_template_id || rule.vm_template_id === null);
+      const decision = evaluateNegotiation(String(original.base_price), String(original.currency), policy, rules, { requestedDiscountPercent: dto.discountPercent });
+      if (percentBasisPoints(decision.discountPercent) !== percentBasisPoints(dto.discountPercent)) throw new ConflictException("Override exceeds the applicable pricing and negotiation restrictions");
+      if (decision.requiresApproval) throw new ConflictException("Override terms still require provider approval under the applicable threshold");
+      const discount = parseMoney(decision.discountAmount);
+      const finalPrice = parseMoney(decision.finalPrice);
 
       const oldStatus = String(original.status);
+      assertOfferTransition(oldStatus, "countered");
       await client.query(`UPDATE offers SET status = 'countered', updated_at = NOW() WHERE id = $1 AND status = 'pending_provider_review'`, [offerId]);
-      await client.query(`INSERT INTO offer_events (offer_id, actor_id, from_status, to_status, event_type, reason, metadata) VALUES ($1,$2,$3,'countered','provider_manual_override',$4,$5::jsonb)`, [offerId, user.userId, oldStatus, dto.reason, JSON.stringify({ revised: true })]);
+      await client.query(`INSERT INTO offer_events (offer_id, actor_id, from_status, to_status, event_type, reason, metadata) VALUES ($1,$2,$3,'countered','provider_manual_override',$4,$5::jsonb)`, [offerId, user.userId, oldStatus, reason, JSON.stringify({ revised: true })]);
       const revised = (await client.query<Record<string, unknown>>(
         `INSERT INTO offers (customer_id, organization_id, chat_session_id, pricing_version_id, negotiation_policy_id,
           vm_template_id, vm_configuration, base_price, discount_percent, discount_amount, final_price, currency,
@@ -185,13 +203,13 @@ export class ProviderService {
          VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11,$12,$13,$14,'presented',$15,NOW(),NOW() + INTERVAL '7 days',$16,$17,$18::jsonb)
          RETURNING *`, [
           original.customer_id, organizationId, original.chat_session_id, original.pricing_version_id, original.negotiation_policy_id,
-          original.vm_template_id, JSON.stringify(original.vm_configuration), original.base_price, dto.discountPercent,
+          original.vm_template_id, JSON.stringify(original.vm_configuration), original.base_price, decision.discountPercent,
           formatMoney(discount), formatMoney(finalPrice), original.currency, original.billing_cycle, original.rental_duration_days,
-          dto.reason, user.userId, offerId, JSON.stringify({ sourceOfferId: offerId, previousDiscountPercent: original.discount_percent, previousDiscountAmount: original.discount_amount, previousFinalPrice: original.final_price, reason: dto.reason, actorId: user.userId })],
+          reason, user.userId, offerId, JSON.stringify({ sourceOfferId: offerId, previousDiscountPercent: original.discount_percent, previousDiscountAmount: original.discount_amount, previousFinalPrice: original.final_price, reason, actorId: user.userId })],
       )).rows[0]!;
-      await client.query(`INSERT INTO offer_events (offer_id, actor_id, from_status, to_status, event_type, reason, metadata) VALUES ($1,$2,NULL,'presented','provider_manual_override_revision',$3,$4::jsonb)`, [revised.id, user.userId, dto.reason, JSON.stringify({ parentOfferId: offerId })]);
-      await client.query(`UPDATE chat_sessions SET active_offer_id = $2, state = 'CUSTOMER_REVIEW', updated_at = NOW() WHERE id = $1 AND active_offer_id = $3`, [original.chat_session_id, revised.id, offerId]);
-      await this.audit.record({ actorId: user.userId, organizationId, action: "offer.manual_override", entityType: "offer", entityId: String(revised.id), oldData: { offerId, discountPercent: original.discount_percent, discountAmount: original.discount_amount, finalPrice: original.final_price }, newData: { offerId: revised.id, parentOfferId: offerId, discountPercent: dto.discountPercent, discountAmount: formatMoney(discount), finalPrice: formatMoney(finalPrice) }, reason: dto.reason }, client);
+      await client.query(`INSERT INTO offer_events (offer_id, actor_id, from_status, to_status, event_type, reason, metadata) VALUES ($1,$2,NULL,'presented','provider_manual_override_revision',$3,$4::jsonb)`, [revised.id, user.userId, reason, JSON.stringify({ parentOfferId: offerId })]);
+      await client.query(`UPDATE chat_sessions SET active_offer_id = $2, state = 'CUSTOMER_REVIEW', updated_at = NOW() WHERE id = $1`, [original.chat_session_id, revised.id]);
+      await this.audit.record({ actorId: user.userId, organizationId, action: "offer.manual_override", entityType: "offer", entityId: String(revised.id), oldData: { offerId, discountPercent: original.discount_percent, discountAmount: original.discount_amount, finalPrice: original.final_price }, newData: { offerId: revised.id, parentOfferId: offerId, discountPercent: decision.discountPercent, discountAmount: formatMoney(discount), finalPrice: formatMoney(finalPrice) }, reason }, client);
       const response = { sourceOfferId: offerId, revisedOffer: this.publicDeal(revised), customerAcceptanceRequired: true, invoiceChanged: false };
       await client.query(`UPDATE idempotency_keys SET status = 'succeeded', response_status = 200, response_body = $3::jsonb, resource_id = $4, updated_at = NOW() WHERE scope = $1 AND idempotency_key = $2`, [scope, key, JSON.stringify(response), revised.id]);
       return response;
@@ -209,11 +227,7 @@ export class ProviderService {
   }
 
   private validateWindow(query: ProviderReportQueryDto) {
-    if (!query.from || !query.to) return;
-    const from = new Date(query.from).getTime();
-    const to = new Date(query.to).getTime();
-    if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) throw new BadRequestException("The reporting window must satisfy from < to");
-    if (to - from > 366 * 24 * 60 * 60 * 1000) throw new BadRequestException("The reporting window cannot exceed 366 days");
+    validateProviderReportWindow(query.from, query.to);
   }
 
   private windowResponse(query: ProviderReportQueryDto) { return { from: query.from ?? null, to: query.to ?? null, interval: "[from,to)" }; }

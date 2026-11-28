@@ -10,6 +10,7 @@ interface PageResult<T> {
 }
 export interface InvoiceAllocationRow {
   id: string;
+  customer_id: string;
   invoice_number: string;
   invoice_type: string;
   currency: string;
@@ -122,7 +123,7 @@ export class ProviderRepository {
           UNION ALL
           SELECT customer_id, accepted_at AS activity_at FROM orders WHERE organization_id = $1
         ) activity GROUP BY customer_id
-      )`;
+      ), ${this.invoiceAllocationCte().slice(5)}`;
     const count = await this.db.query<{ count: string }>(`${base} SELECT count(*)::text AS count FROM relationships WHERE ${filters.join(" AND ")}`, values);
     const rows = await this.db.query<Record<string, unknown>>(
       `${base}
@@ -132,9 +133,10 @@ export class ProviderRepository {
               (SELECT count(*)::int FROM orders o WHERE o.organization_id = $1 AND o.customer_id = relationships.customer_id) AS order_count,
               (SELECT count(*)::int FROM virtual_machines vm JOIN orders o ON o.id = vm.order_id AND o.organization_id = $1 WHERE vm.customer_id = relationships.customer_id) AS vm_count,
               COALESCE((SELECT jsonb_agg(x ORDER BY x.currency) FROM (
-                SELECT i.currency, COALESCE(SUM(i.total - i.amount_paid) FILTER (WHERE i.status IN ('issued','partially_paid','overdue')),0)::text AS outstanding
-                FROM invoices i JOIN orders o ON o.id = i.order_id AND o.organization_id = $1
-                WHERE i.customer_id = relationships.customer_id GROUP BY i.currency
+                SELECT a.currency, COALESCE(SUM(a.provider_outstanding::numeric),0)::text AS outstanding
+                FROM allocations a
+                WHERE a.organization_id = $1 AND a.customer_id = relationships.customer_id
+                GROUP BY a.currency
               ) x), '[]'::jsonb) AS outstanding_by_currency,
               (SELECT max(activity_at) FROM (
                 SELECT created_at AS activity_at FROM offers WHERE organization_id = $1 AND customer_id = relationships.customer_id
@@ -151,14 +153,19 @@ export class ProviderRepository {
 
   async getCustomer(organizationId: string, customerId: string) {
     const result = await this.db.query<Record<string, unknown>>(
-      `SELECT u.id, u.full_name, u.email, u.status AS account_status,
-        min(activity.created_at) AS first_activity_at, max(activity.created_at) AS last_activity_at,
-        count(*) FILTER (WHERE activity.kind = 'offer')::int AS offer_count,
-        count(*) FILTER (WHERE activity.kind = 'order')::int AS order_count
-       FROM users u JOIN (
+      `WITH customer_activity AS (
          SELECT customer_id, created_at, 'offer' AS kind FROM offers WHERE organization_id = $1
          UNION ALL SELECT customer_id, accepted_at AS created_at, 'order' AS kind FROM orders WHERE organization_id = $1
-       ) activity ON activity.customer_id = u.id
+       ), ${this.invoiceAllocationCte().slice(5)}
+       SELECT u.id, u.full_name, u.email, u.status AS account_status,
+        min(activity.created_at) AS first_activity_at, max(activity.created_at) AS last_activity_at,
+        count(*) FILTER (WHERE activity.kind = 'offer')::int AS offer_count,
+        count(*) FILTER (WHERE activity.kind = 'order')::int AS order_count,
+        COALESCE((SELECT jsonb_agg(x ORDER BY x.currency) FROM (
+          SELECT a.currency, COALESCE(SUM(a.provider_outstanding::numeric),0)::text AS outstanding
+          FROM allocations a WHERE a.organization_id = $1 AND a.customer_id = u.id GROUP BY a.currency
+        ) x), '[]'::jsonb) AS outstanding_by_currency
+       FROM users u JOIN customer_activity activity ON activity.customer_id = u.id
        WHERE u.id = $2 GROUP BY u.id, u.full_name, u.email, u.status`, [organizationId, customerId]);
     if (!result.rows[0]) return undefined;
     const [deals, orders, vms] = await Promise.all([
@@ -245,7 +252,7 @@ export class ProviderRepository {
 
   async invoiceAllocations(organizationId: string, query: Query, page?: number, pageSize?: number): Promise<PageResult<InvoiceAllocationRow>> {
     const values: unknown[] = [organizationId];
-    const filters = ["a.organization_id = $1", "a.provider_amount::numeric <> 0"];
+    const filters = ["a.organization_id = $1", "a.issued_at IS NOT NULL"];
     if (query.from) { values.push(query.from); filters.push(`a.issued_at >= $${values.length}`); }
     if (query.to) { values.push(query.to); filters.push(`a.issued_at < $${values.length}`); }
     if (query.invoiceStatus) { values.push(query.invoiceStatus); filters.push(`a.status = $${values.length}`); }
@@ -264,7 +271,7 @@ export class ProviderRepository {
 
   async financialSummary(organizationId: string, query: Query) {
     const values: unknown[] = [organizationId];
-    const filters = ["a.organization_id = $1", "a.provider_amount::numeric <> 0"];
+    const filters = ["a.organization_id = $1", "a.issued_at IS NOT NULL"];
     if (query.from) { values.push(query.from); filters.push(`a.issued_at >= $${values.length}`); }
     if (query.to) { values.push(query.to); filters.push(`a.issued_at < $${values.length}`); }
     if (query.invoiceStatus) { values.push(query.invoiceStatus); filters.push(`a.status = $${values.length}`); }
@@ -280,8 +287,8 @@ export class ProviderRepository {
       overdue_invoice_count: number;
     }>(`${this.invoiceAllocationCte()}
       SELECT a.currency, count(*)::int AS invoice_count,
-        SUM(a.provider_amount::numeric)::numeric(19,4)::text AS invoiced_amount,
-        SUM(a.provider_verified_payments::numeric)::numeric(19,4)::text AS verified_simulated_payments,
+        SUM(CASE WHEN a.status <> 'void' THEN a.provider_amount::numeric ELSE 0 END)::numeric(19,4)::text AS invoiced_amount,
+        SUM(CASE WHEN a.status <> 'void' THEN a.provider_verified_payments::numeric ELSE 0 END)::numeric(19,4)::text AS verified_simulated_payments,
         SUM(a.provider_outstanding::numeric)::numeric(19,4)::text AS outstanding_amount,
         SUM(a.provider_overdue::numeric)::numeric(19,4)::text AS overdue_amount,
         count(*) FILTER (WHERE a.attribution_scope = 'shared_invoice')::int AS shared_invoice_count,
@@ -299,12 +306,45 @@ export class ProviderRepository {
     }));
   }
 
-  async activity(organizationId: string, limit = 25) {
-    const result = await this.db.query(
+  async invoiceStatusCounts(organizationId: string, query: Query) {
+    const values: unknown[] = [organizationId];
+    const filters = ["a.organization_id = $1", "a.issued_at IS NOT NULL"];
+    if (query.from) { values.push(query.from); filters.push(`a.issued_at >= $${values.length}`); }
+    if (query.to) { values.push(query.to); filters.push(`a.issued_at < $${values.length}`); }
+    if (query.invoiceStatus) { values.push(query.invoiceStatus); filters.push(`a.status = $${values.length}`); }
+    if (query.currency) { values.push(query.currency); filters.push(`a.currency = $${values.length}`); }
+    const result = await this.db.query<{ status: string; count: number }>(
+      `${this.invoiceAllocationCte()}
+       SELECT a.status, count(*)::int AS count
+       FROM allocations a
+       WHERE ${filters.join(" AND ")}
+       GROUP BY a.status`, values,
+    );
+    const counts: Record<string, number> = {
+      issued: 0,
+      partially_paid: 0,
+      paid: 0,
+      overdue: 0,
+      void: 0,
+      uncollectible: 0,
+    };
+    for (const row of result.rows) counts[row.status] = row.count;
+    return counts;
+  }
+
+  async activity(organizationId: string, query: Query, page = 1, pageSize = 25): Promise<PageResult<Record<string, unknown>>> {
+    const values: unknown[] = [organizationId];
+    const filters = ["organization_id = $1"];
+    if (query.from) { values.push(query.from); filters.push(`created_at >= $${values.length}`); }
+    if (query.to) { values.push(query.to); filters.push(`created_at < $${values.length}`); }
+    const count = await this.db.query<{ count: string }>(`SELECT count(*)::text AS count FROM audit_logs WHERE ${filters.join(" AND ")}`, values);
+    const result = await this.db.query<Record<string, unknown>>(
       `SELECT id, action AS event_type, entity_type, entity_id, reason, new_data, created_at
-       FROM audit_logs WHERE organization_id = $1
-       ORDER BY created_at DESC, id DESC LIMIT $2`, [organizationId, limit]);
-    return result.rows;
+       FROM audit_logs WHERE ${filters.join(" AND ")}
+       ORDER BY created_at DESC, id DESC LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+      [...values, pageSize, (page - 1) * pageSize],
+    );
+    return { rows: result.rows, total: Number(count.rows[0]?.count ?? 0) };
   }
 
   async dashboardCounts(organizationId: string, query: Query) {
@@ -321,13 +361,13 @@ export class ProviderRepository {
           SELECT customer_id FROM offers WHERE organization_id = $1
           UNION SELECT customer_id FROM orders WHERE organization_id = $1
         ) customers) AS total_customers,
-       (SELECT count(*)::text FROM virtual_machines vm JOIN orders o ON o.id = vm.order_id WHERE o.organization_id = $1 AND vm.state NOT IN ('TERMINATED','FAILED')) AS active_vms,
+       (SELECT count(*)::text FROM virtual_machines vm JOIN orders o ON o.id = vm.order_id WHERE o.organization_id = $1 AND vm.state = 'RUNNING') AS active_vms,
        (SELECT count(*)::text FROM offers WHERE organization_id = $1 AND status = 'pending_provider_review' AND (expires_at IS NULL OR expires_at > NOW())) AS pending_deal_reviews,
        (SELECT count(*)::text FROM offers WHERE organization_id = $1 AND status = 'accepted'${range("accepted_at")}) AS accepted_offers,
        (SELECT count(*)::text FROM orders WHERE organization_id = $1 AND status = 'completed'${range("accepted_at")}) AS completed_orders,
        (SELECT count(*)::text FROM provisioning_jobs pj JOIN orders o ON o.id = pj.order_id WHERE o.organization_id = $1 AND pj.status = 'FAILED'${range("pj.created_at")}) AS failed_provisioning_jobs,
-       (SELECT count(*)::text FROM invoices i JOIN orders o ON o.id = i.order_id WHERE o.organization_id = $1${range("i.issued_at")}) AS issued_initial_invoices,
-       (SELECT count(*)::text FROM invoices i JOIN orders o ON o.id = i.order_id WHERE o.organization_id = $1 AND i.status = 'overdue'${range("i.issued_at")}) AS overdue_invoice_count,
+       (SELECT count(*)::text FROM invoices i JOIN orders o ON o.id = i.order_id WHERE o.organization_id = $1 AND i.invoice_type = 'initial_order' AND i.issued_at IS NOT NULL${range("i.issued_at")}) AS issued_initial_invoices,
+       (SELECT count(*)::text FROM invoices i JOIN orders o ON o.id = i.order_id WHERE o.organization_id = $1 AND i.invoice_type = 'initial_order' AND i.status = 'overdue' AND i.issued_at IS NOT NULL${range("i.issued_at")}) AS overdue_invoice_count,
        (SELECT COALESCE(avg(discount_percent),0)::text FROM offers WHERE organization_id = $1 AND status = 'accepted'${range("accepted_at")}) AS average_accepted_discount`
       , values);
     return result.rows[0]!;
@@ -349,8 +389,8 @@ export class ProviderRepository {
     if (query.to) { values.push(query.to); filters.push(`a.issued_at < $${values.length}`); }
     const result = await this.db.query(`${this.invoiceAllocationCte()}
       SELECT date_trunc('month', a.issued_at AT TIME ZONE 'UTC')::date AS period, a.currency,
-        count(*)::int AS invoice_count, SUM(a.provider_amount::numeric)::numeric(19,4)::text AS invoiced_amount,
-        SUM(a.provider_verified_payments::numeric)::numeric(19,4)::text AS verified_simulated_payments,
+        count(*)::int AS invoice_count, SUM(CASE WHEN a.status <> 'void' THEN a.provider_amount::numeric ELSE 0 END)::numeric(19,4)::text AS invoiced_amount,
+        SUM(CASE WHEN a.status <> 'void' THEN a.provider_verified_payments::numeric ELSE 0 END)::numeric(19,4)::text AS verified_simulated_payments,
         SUM(a.provider_outstanding::numeric)::numeric(19,4)::text AS outstanding_amount,
         SUM(a.provider_overdue::numeric)::numeric(19,4)::text AS overdue_amount
       FROM allocations a WHERE ${filters.join(" AND ")}
@@ -359,17 +399,25 @@ export class ProviderRepository {
   }
 
   async discountAnalytics(organizationId: string, query: Query) {
-    const values: unknown[] = [organizationId];
-    const filters = ["organization_id = $1"];
-    if (query.from) { values.push(query.from); filters.push(`accepted_at >= $${values.length}`); }
-    if (query.to) { values.push(query.to); filters.push(`accepted_at < $${values.length}`); }
+    const acceptedValues: unknown[] = [organizationId];
+    const acceptedFilters = ["organization_id = $1", "status = 'accepted'"];
+    const offeredValues: unknown[] = [organizationId];
+    const offeredFilters = ["organization_id = $1"];
+    if (query.from) {
+      acceptedValues.push(query.from); acceptedFilters.push(`accepted_at >= $${acceptedValues.length}`);
+      offeredValues.push(query.from); offeredFilters.push(`created_at >= $${offeredValues.length}`);
+    }
+    if (query.to) {
+      acceptedValues.push(query.to); acceptedFilters.push(`accepted_at < $${acceptedValues.length}`);
+      offeredValues.push(query.to); offeredFilters.push(`created_at < $${offeredValues.length}`);
+    }
     const result = await this.db.query(`SELECT currency, count(*)::int AS accepted_offer_count,
       COALESCE(avg(discount_percent),0)::text AS average_accepted_discount_percent,
       COALESCE(avg(discount_amount),0)::numeric(19,4)::text AS average_accepted_discount_amount
-      FROM offers WHERE status = 'accepted' AND ${filters.join(" AND ")} GROUP BY currency ORDER BY currency`, values);
+      FROM offers WHERE ${acceptedFilters.join(" AND ")} GROUP BY currency ORDER BY currency`, acceptedValues);
     const offered = await this.db.query(`SELECT currency, count(*)::int AS offer_count,
       COALESCE(avg(discount_percent),0)::text AS average_offered_discount_percent
-      FROM offers WHERE ${filters.join(" AND ")} GROUP BY currency ORDER BY currency`, values);
+      FROM offers WHERE ${offeredFilters.join(" AND ")} GROUP BY currency ORDER BY currency`, offeredValues);
     return { accepted: result.rows, offered: offered.rows };
   }
 
@@ -381,7 +429,11 @@ export class ProviderRepository {
     const result = await this.db.query<Record<string, string>>(`SELECT
       count(DISTINCT customer_id)::text AS negotiated_customers,
       count(DISTINCT customer_id) FILTER (WHERE status IN ('presented','pending_provider_review','approved','accepted'))::text AS presented_customers,
-      count(DISTINCT customer_id) FILTER (WHERE status = 'approved' OR status = 'accepted')::text AS approved_customers,
+      count(DISTINCT customer_id) FILTER (WHERE (
+        SELECT oa.decision FROM offer_approvals oa
+        WHERE oa.offer_id = offers.id
+        ORDER BY oa.created_at DESC, oa.id DESC LIMIT 1
+      ) = 'approved')::text AS approved_customers,
       count(DISTINCT customer_id) FILTER (WHERE status = 'accepted')::text AS accepted_customers
       FROM offers WHERE ${filters.join(" AND ")}`, values);
     const counts = result.rows[0]!;
@@ -402,9 +454,9 @@ export class ProviderRepository {
     const conditions = ["o.organization_id = $1"];
     if (query.from) { values.push(query.from); conditions.push(`vm.created_at >= $${values.length}`); }
     if (query.to) { values.push(query.to); conditions.push(`vm.created_at < $${values.length}`); }
-    const states = await this.db.query(`SELECT vm.state, count(*)::int AS count FROM virtual_machines vm JOIN orders o ON o.id = vm.order_id WHERE ${conditions.join(" AND ")} GROUP BY vm.state ORDER BY vm.state`, values);
+    const states = await this.db.query<{ state: string; count: number }>(`SELECT vm.state, count(*)::int AS count FROM virtual_machines vm JOIN orders o ON o.id = vm.order_id WHERE ${conditions.join(" AND ")} GROUP BY vm.state ORDER BY vm.state`, values);
     const failures = await this.db.query(`SELECT count(*)::int AS count FROM provisioning_jobs pj JOIN orders o ON o.id = pj.order_id WHERE o.organization_id = $1 AND pj.status = 'FAILED'${query.from ? ` AND pj.created_at >= $2` : ""}${query.to ? ` AND pj.created_at < $${query.from ? 3 : 2}` : ""}`, [organizationId, ...(query.from ? [query.from] : []), ...(query.to ? [query.to] : [])]);
-    return { stateDistribution: states.rows, provisioningFailures: Number(failures.rows[0]?.count ?? 0) };
+    return { stateDistribution: states.rows, activeVirtualMachines: Number(states.rows.find((row) => row.state === "RUNNING")?.count ?? 0), provisioningFailures: Number(failures.rows[0]?.count ?? 0) };
   }
 
   private dealFilters(organizationId: string, query: Query) {
@@ -437,39 +489,47 @@ export class ProviderRepository {
   }
 
   private invoiceAllocationCte() {
-    return `WITH invoice_orgs AS (
-      SELECT i.id, count(DISTINCT o.organization_id)::int AS provider_count
+    return `WITH invoice_provider_lines AS (
+      SELECT i.id AS invoice_id, i.customer_id, o.organization_id, i.total::numeric AS component_amount
       FROM invoices i
-      LEFT JOIN invoice_items ii ON ii.invoice_id = i.id
-      LEFT JOIN charge_ledger_entries cle ON cle.id = ii.charge_ledger_id
-      LEFT JOIN virtual_machines vm ON vm.id = cle.vm_id
-      LEFT JOIN orders o ON o.id = COALESCE(i.order_id, vm.order_id)
-      GROUP BY i.id
-    ), allocations AS (
-      SELECT i.id, i.invoice_number, i.invoice_type, i.currency, i.status, i.issued_at, i.due_at, i.paid_at,
-        i.total::text, i.amount_paid::text, o.organization_id,
-        i.total::text AS provider_amount,
-        GREATEST(i.total - i.amount_paid, 0)::text AS provider_outstanding,
-        CASE WHEN i.status = 'overdue' THEN GREATEST(i.total - i.amount_paid, 0) ELSE 0 END::text AS provider_overdue,
-        COALESCE(p.verified_amount, 0)::text AS provider_verified_payments,
-        'single_provider'::text AS attribution_scope, 1::int AS provider_count
-      FROM invoices i JOIN orders o ON o.id = i.order_id
-      JOIN invoice_orgs io ON io.id = i.id AND io.provider_count = 1
-      LEFT JOIN (SELECT invoice_id, SUM(amount) FILTER (WHERE status = 'verified') AS verified_amount FROM payment_records GROUP BY invoice_id) p ON p.invoice_id = i.id
+      JOIN orders o ON o.id = i.order_id
       UNION ALL
-      SELECT i.id, i.invoice_number, i.invoice_type, i.currency, i.status, i.issued_at, i.due_at, i.paid_at,
-        i.total::text, i.amount_paid::text, o.organization_id,
-        SUM(ii.amount)::numeric(19,4)::text AS provider_amount,
-        CASE WHEN i.subtotal > 0 THEN (GREATEST(i.total - i.amount_paid,0) * SUM(ii.amount) / i.subtotal)::numeric(19,4)::text ELSE '0.0000' END AS provider_outstanding,
-        CASE WHEN i.status = 'overdue' AND i.subtotal > 0 THEN ((GREATEST(i.total - i.amount_paid,0) * SUM(ii.amount) / i.subtotal))::numeric(19,4)::text ELSE '0.0000' END AS provider_overdue,
-        '0.0000'::text AS provider_verified_payments,
-        'shared_invoice'::text AS attribution_scope, io.provider_count
-      FROM invoices i JOIN invoice_items ii ON ii.invoice_id = i.id
+      SELECT i.id AS invoice_id, i.customer_id, o.organization_id, SUM(ii.amount)::numeric AS component_amount
+      FROM invoices i
+      JOIN invoice_items ii ON ii.invoice_id = i.id
       JOIN charge_ledger_entries cle ON cle.id = ii.charge_ledger_id
       JOIN virtual_machines vm ON vm.id = cle.vm_id
       JOIN orders o ON o.id = vm.order_id
-      JOIN invoice_orgs io ON io.id = i.id AND io.provider_count > 1
-      GROUP BY i.id, i.invoice_number, i.invoice_type, i.currency, i.status, i.issued_at, i.due_at, i.paid_at, i.total, i.amount_paid, i.subtotal, o.organization_id, io.provider_count
+      WHERE i.order_id IS NULL
+      GROUP BY i.id, i.customer_id, o.organization_id
+    ), invoice_orgs AS (
+      SELECT invoice_id, count(*)::int AS provider_count,
+             SUM(component_amount)::numeric AS attributed_component_total
+      FROM invoice_provider_lines
+      GROUP BY invoice_id
+    ), verified_payments AS (
+      SELECT invoice_id, SUM(amount) FILTER (WHERE status = 'verified')::numeric AS verified_amount
+      FROM payment_records
+      GROUP BY invoice_id
+    ), allocations AS (
+      SELECT i.id, i.customer_id, i.invoice_number, i.invoice_type, i.currency, i.status, i.issued_at, i.due_at, i.paid_at,
+        i.total::text, i.amount_paid::text, line.organization_id,
+        CASE WHEN io.provider_count = 1 THEN i.total
+          WHEN io.attributed_component_total <> 0 THEN (i.total * line.component_amount / io.attributed_component_total)
+          ELSE line.component_amount END::numeric(19,4)::text AS provider_amount,
+        CASE WHEN i.status IN ('issued','partially_paid','overdue') AND io.attributed_component_total <> 0
+          THEN (GREATEST(i.total - i.amount_paid, 0) * line.component_amount / io.attributed_component_total)::numeric(19,4)::text
+          ELSE '0.0000' END AS provider_outstanding,
+        CASE WHEN i.status = 'overdue' AND io.attributed_component_total <> 0
+          THEN (GREATEST(i.total - i.amount_paid, 0) * line.component_amount / io.attributed_component_total)::numeric(19,4)::text
+          ELSE '0.0000' END AS provider_overdue,
+        CASE WHEN io.provider_count = 1 AND i.status <> 'void' THEN COALESCE(p.verified_amount, 0)::numeric(19,4)::text ELSE '0.0000' END AS provider_verified_payments,
+        CASE WHEN io.provider_count = 1 THEN 'single_provider'::text ELSE 'shared_invoice'::text END AS attribution_scope,
+        io.provider_count
+      FROM invoices i
+      JOIN invoice_provider_lines line ON line.invoice_id = i.id
+      JOIN invoice_orgs io ON io.invoice_id = i.id
+      LEFT JOIN verified_payments p ON p.invoice_id = i.id
     )`;
   }
 }

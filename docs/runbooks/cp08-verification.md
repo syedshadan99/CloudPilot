@@ -37,6 +37,7 @@ curl.exe -i -b $cookieJar "http://127.0.0.1:3000/api/v1/provider/analytics/reven
 curl.exe -i -b $cookieJar "http://127.0.0.1:3000/api/v1/provider/analytics/deals?organizationId=$organizationId"
 curl.exe -i -b $cookieJar "http://127.0.0.1:3000/api/v1/provider/analytics/vms?organizationId=$organizationId"
 curl.exe -i -b $cookieJar "http://127.0.0.1:3000/api/v1/provider/analytics/billing?organizationId=$organizationId"
+curl.exe -i -b $cookieJar "http://127.0.0.1:3000/api/v1/provider/activity?organizationId=$organizationId&page=1&pageSize=25"
 ```
 
 For isolation, log in as a second provider organization and change only `organizationId` and object IDs. Verify another organization's dashboard is `403`, and its deal/customer/pricing/order/VM/invoice IDs are `404` or otherwise denied. Also verify an authenticated customer receives `403` for provider routes and a provider staff user receives `403` for the override route.
@@ -53,5 +54,7 @@ WHERE o.organization_id = '<org>' GROUP BY currency;
 SELECT state, count(*) FROM virtual_machines vm JOIN orders o ON o.id = vm.order_id
 WHERE o.organization_id = '<org>' GROUP BY state;
 ```
+
+`activeVirtualMachines` is the `RUNNING` row from the VM query, not the sum of every non-terminal state. For recurring invoice reconciliation, use `invoice_items.charge_ledger_id -> charge_ledger_entries.vm_id -> virtual_machines.order_id -> orders.organization_id`; do not sum invoice headers after joining invoice items or payment attempts. Shared recurring invoice payments remain unallocated because payment-allocation rows are not persisted.
 
 Record exact passed/failed/skipped counts. A skipped or unavailable live database run is a blocker, not a pass. Finish with `git status --short --branch` and `git diff --check`.

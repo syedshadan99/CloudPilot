@@ -1,9 +1,10 @@
-import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
+import { ForbiddenException, Injectable } from "@nestjs/common";
 import type { AuthenticatedPrincipal } from "../../common/auth/authenticated-principal.js";
 import { AuthorizationService } from "../identity/services/authorization.service.js";
 import { ProviderRepository } from "../provider/provider.repository.js";
 import { ProviderService } from "../provider/provider.service.js";
 import type { ProviderReportQueryDto } from "../provider/dto/provider.dto.js";
+import { validateProviderReportWindow } from "../provider/report-window.js";
 
 @Injectable()
 export class AnalyticsService {
@@ -44,8 +45,11 @@ export class AnalyticsService {
   async billing(user: AuthenticatedPrincipal, query: ProviderReportQueryDto) {
     await this.assertMember(user, query);
     this.validateWindow(query);
-    const invoices = await this.repo.invoiceAllocations(query.organizationId, query, 1, 100);
-    return { byCurrency: await this.repo.financialSummary(query.organizationId, query), invoiceStatusCounts: countStatuses(invoices.rows), invoices: { data: invoices.rows, pagination: { page: 1, pageSize: 100, total: invoices.total } } };
+    const [invoices, invoiceStatusCounts] = await Promise.all([
+      this.repo.invoiceAllocations(query.organizationId, query, query.page, query.pageSize),
+      this.repo.invoiceStatusCounts(query.organizationId, query),
+    ]);
+    return { byCurrency: await this.repo.financialSummary(query.organizationId, query), invoiceStatusCounts, invoices: { data: invoices.rows, pagination: { page: query.page, pageSize: query.pageSize, total: invoices.total } } };
   }
 
   private async assertMember(user: AuthenticatedPrincipal, query: ProviderReportQueryDto) {
@@ -54,16 +58,6 @@ export class AnalyticsService {
   }
 
   private validateWindow(query: ProviderReportQueryDto) {
-    if (!query.from || !query.to) return;
-    const from = new Date(query.from).getTime();
-    const to = new Date(query.to).getTime();
-    if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) throw new BadRequestException("The reporting window must satisfy from < to");
-    if (to - from > 366 * 24 * 60 * 60 * 1000) throw new BadRequestException("The reporting window cannot exceed 366 days");
+    validateProviderReportWindow(query.from, query.to);
   }
-}
-
-function countStatuses(rows: Array<{ status: string }>) {
-  const counts: Record<string, number> = {};
-  for (const row of rows) counts[row.status] = (counts[row.status] ?? 0) + 1;
-  return counts;
 }

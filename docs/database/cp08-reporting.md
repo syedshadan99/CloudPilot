@@ -12,7 +12,9 @@ CP-08 adds migration `0012_cp08_reporting_indexes.sql` only. Applied migrations 
 - Activity: `audit_logs.organization_id` is authoritative.
 - Pricing: `pricing_versions.organization_id` is authoritative and rules are joined through `pricing_version_id`.
 
-Provider recurring invoice queries aggregate charge lines before exposing totals. They do not join invoice headers, items and payment attempts in one ungrouped relation. A shared invoice can produce one provider allocation per provider, while verified payment allocation is reported as zero for that shared invoice because settlement ownership is not persisted.
+Provider invoice queries first build one provider line per invoice/provider. Initial and order-linked invoices use `invoices.order_id`; recurring invoices with a null `order_id` use `invoice_items.charge_ledger_id -> charge_ledger_entries.vm_id -> virtual_machines.order_id -> orders.organization_id`. Multiple invoice items and multiple VMs are summed before the header is allocated. Single-provider invoices receive the full issued header total; shared headers, including persisted adjustments, are allocated proportionally to provider charge-line totals. They do not join invoice headers, items and payment attempts in one ungrouped relation. A shared invoice can produce one provider allocation per provider, while verified payment allocation is reported as zero for that shared invoice because settlement ownership is not persisted. Void and uncollectible balances do not count as receivables, and void invoices contribute zero invoiced/collected amount.
+
+`activeVirtualMachines` is the current `RUNNING` state only. Activity uses a separate organization-scoped count query for page totals. Conversion `providerApproved` is based on the latest persisted `offer_approvals` decision, not merely an accepted offer.
 
 All monetary fields remain PostgreSQL `NUMERIC(19,4)` and are serialized as decimal strings. No FX conversion is performed.
 

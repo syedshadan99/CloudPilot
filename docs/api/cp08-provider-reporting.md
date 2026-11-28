@@ -38,24 +38,26 @@ List responses use `{ data, pagination: { page, pageSize, total } }`.
 | KPI | Authoritative source and calculation |
 | --- | --- |
 | `totalCustomers` | Distinct `customer_id` from provider-owned `offers` or `orders`; no repeat count for counteroffers or invoices. |
-| `activeVirtualMachines` | `virtual_machines` joined through provider-owned `orders`, excluding `TERMINATED` and `FAILED`. |
+| `activeVirtualMachines` | `virtual_machines` joined through provider-owned `orders` with current state `RUNNING`; stopped, suspended, provisioning, failed and terminated machines are not active. |
 | `pendingDealReviews` | Current `offers.status = 'pending_provider_review'`; expired rows are reconciled by the existing offer workflow and never counted as historical pending rows. |
 | `acceptedOffers` | `offers.status = 'accepted'`, using `accepted_at` for a requested window. |
 | `completedOrders` | Provider-owned `orders.status = 'completed'`, using `accepted_at` for the current schema. |
 | `failedProvisioningJobs` | Provider-owned order joins where `provisioning_jobs.status = 'FAILED'`. |
-| `invoicedAmount` | Initial invoice total for a provider-owned order; recurring invoice charge-line amounts for provider-owned VM/order lines. |
+| `invoicedAmount` | Issued, non-void initial invoice totals for provider-owned orders plus recurring invoice amounts attributed from provider-owned VM/order charge lines. Single-provider headers are taken in full; shared headers, including persisted adjustments, are allocated proportionally. Different currencies remain separate. |
 | `verifiedSimulatedPayments` | Sum of `payment_records.amount` only where `status = 'verified'` and the invoice is attributable to one provider. Shared-invoice settlement is deliberately unallocated. |
 | `outstandingAmount` | Eligible invoice balance, `total - amount_paid`; shared recurring headers are allocated proportionally to provider charge lines. |
 | `overdueAmount` | The same eligible balance only where persisted invoice status is `overdue`. |
 | `averageAcceptedDiscountPercent` | Average `offers.discount_percent` for accepted offers, using `accepted_at`; it is not an average of counteroffers. |
-| Conversion funnel | Distinct customers at each persisted offer/order/payment stage, with denominator counts returned as stage counts. It is not a cohort attribution claim. |
-| VM analytics | Current `virtual_machines.state` and provisioning job status. Historical state-at-time reporting is not inferred from current state. |
+| Conversion funnel | Distinct customers at each persisted offer/order/payment stage. `providerApproved` requires an `offer_approvals.decision = 'approved'` row; an accepted offer alone is not provider approval. The report is an observation of records in the selected offer-created cohort, not a causal conversion claim. |
+| VM analytics | Current `virtual_machines.state`, `activeVirtualMachines` equal to the `RUNNING` bucket, and provisioning job status. Historical state-at-time reporting is not inferred from current state. |
 
 The API intentionally does not expose recognized revenue or margin. Invoices, usage charges and simulated collections are separate facts. No approved provider cost basis exists for a margin estimate, so deal detail returns `marginEstimate: null`.
 
 ## Override contract
 
-`POST /provider/deals/:id/override` accepts `{ "discountPercent": "7.50", "reason": "..." }` and an `Idempotency-Key` header. The backend locks the source offer, requires `pending_provider_review`, checks expiry, policy maximum discount and minimum price, marks the source `countered`, inserts a new immutable `presented` offer linked by `parent_offer_id`, writes offer events and an audit row, and updates the chat's active offer. The customer must still accept the revised offer through CP-06. Existing orders, invoices and pricing versions are never changed.
+`POST /provider/deals/:id/override` accepts `{ "discountPercent": "7.50", "reason": "..." }` and an `Idempotency-Key` header. The backend locks the negotiation session and source offer, requires `pending_provider_review`, checks expiry, currency, the retained pricing version's applicable rule ceilings/floors, the negotiation-policy ceiling/floor and approval threshold, marks the source `countered`, inserts a new immutable `presented` offer linked by `parent_offer_id`, writes offer events and an audit row, and updates the chat's active offer. The customer must still accept the revised offer through CP-06. Existing orders, invoices and pricing versions are never changed. Reusing an idempotency key with another payload fails.
+
+Activity uses the same bounded `{ data, pagination }` contract as other lists. Its `total` is a database count, and ordering is `created_at DESC, id DESC`. Custom report windows require both `from` and `to` and use the UTC half-open interval `[from,to)`; the maximum window is 366 days. Pricing history without a window remains an all-history view.
 
 ## Example
 
@@ -63,7 +65,7 @@ The API intentionally does not expose recognized revenue or margin. Invoices, us
 {
   "metrics": {
     "totalCustomers": 4,
-    "activeVirtualMachines": 2,
+    "activeVirtualMachines": 1,
     "pendingDealReviews": 1,
     "averageAcceptedDiscountPercent": "6.2500"
   },

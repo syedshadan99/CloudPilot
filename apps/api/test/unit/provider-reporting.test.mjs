@@ -26,6 +26,8 @@ test("provider dashboard requires a provider role and uses separated currency fa
 
 test("provider report windows are half-open and bounded", async () => {
   const { instance } = service();
+  await assert.rejects(() => instance.dashboard(principal, { organizationId: "org-1", from: "2026-01-01T00:00:00Z" }), BadRequestException);
+  await assert.rejects(() => instance.dashboard(principal, { organizationId: "org-1", to: "2026-01-02T00:00:00Z" }), BadRequestException);
   await assert.rejects(() => instance.dashboard(principal, { organizationId: "org-1", from: "2026-02-01T00:00:00Z", to: "2026-01-01T00:00:00Z" }), BadRequestException);
   await assert.rejects(() => instance.dashboard(principal, { organizationId: "org-1", from: "2024-01-01T00:00:00Z", to: "2026-01-01T00:00:00Z" }), BadRequestException);
 });
