@@ -47,12 +47,12 @@ test("CP-08 repository attributes recurring and shared invoices without multiply
     await client.query(`
       INSERT INTO offers (id, customer_id, organization_id, chat_session_id, pricing_version_id, negotiation_policy_id,
         vm_template_id, vm_configuration, base_price, discount_percent, discount_amount, final_price, currency,
-        billing_cycle, rental_duration_days, status, presented_at, expires_at, accepted_at, created_by)
+        billing_cycle, rental_duration_days, status, presented_at, expires_at, accepted_at, created_at, created_by)
       VALUES ('90000000-0000-0000-0000-00000000c802', $1, $2, '80000000-0000-0000-0000-00000000c802',
         '30000000-0000-0000-0000-000000000001', '70000000-0000-0000-0000-000000000001',
         '40000000-0000-0000-0000-000000000002', '{"template":"starter"}'::jsonb, 48, 0, 0, 48, 'USD',
         'monthly', 30, 'accepted', '2027-01-01T00:00:00Z', '2027-01-02T00:00:00Z', '2027-01-01T00:01:00Z',
-        '20000000-0000-0000-0000-000000000002')`, [customer, otherOrg]);
+        '2027-01-01T00:00:00Z', '20000000-0000-0000-0000-000000000002')`, [customer, otherOrg]);
     await client.query(`
       INSERT INTO orders (id, customer_id, organization_id, offer_id, order_number, pricing_version_id, vm_configuration,
         base_price, discount_amount, final_price, currency, billing_cycle, rental_duration_days, status, accepted_at)
@@ -212,10 +212,10 @@ test("CP-08 conversion provider approval requires an approval record", async () 
     await client.query(`
       INSERT INTO offers (id, customer_id, organization_id, chat_session_id, pricing_version_id, negotiation_policy_id,
         vm_template_id, vm_configuration, base_price, discount_percent, discount_amount, final_price, currency,
-        billing_cycle, rental_duration_days, status, presented_at, expires_at, accepted_at, created_by)
+        billing_cycle, rental_duration_days, status, presented_at, expires_at, accepted_at, created_at, created_by)
       VALUES
-        ('90000000-0000-0000-0000-00000000c804', '20000000-0000-0000-0000-00000000c804', $1, '80000000-0000-0000-0000-00000000c804', '30000000-0000-0000-0000-000000000001', '70000000-0000-0000-0000-000000000001', '40000000-0000-0000-0000-000000000002', '{}'::jsonb, 48, 0, 0, 48, 'USD', 'monthly', 30, 'accepted', '2027-09-01T00:00:00Z', '2027-09-02T00:00:00Z', '2027-09-01T00:01:00Z', '20000000-0000-0000-0000-000000000002'),
-        ('90000000-0000-0000-0000-00000000c805', '20000000-0000-0000-0000-00000000c804', $1, '80000000-0000-0000-0000-00000000c805', '30000000-0000-0000-0000-000000000001', '70000000-0000-0000-0000-000000000001', '40000000-0000-0000-0000-000000000002', '{}'::jsonb, 48, 0, 0, 48, 'USD', 'monthly', 30, 'accepted', '2027-09-01T00:02:00Z', '2027-09-02T00:02:00Z', '2027-09-01T00:03:00Z', '20000000-0000-0000-0000-000000000002')`, [providerOrg]);
+        ('90000000-0000-0000-0000-00000000c804', '20000000-0000-0000-0000-00000000c804', $1, '80000000-0000-0000-0000-00000000c804', '30000000-0000-0000-0000-000000000001', '70000000-0000-0000-0000-000000000001', '40000000-0000-0000-0000-000000000002', '{}'::jsonb, 48, 0, 0, 48, 'USD', 'monthly', 30, 'accepted', '2027-09-01T00:00:00Z', '2027-09-02T00:00:00Z', '2027-09-01T00:01:00Z', '2027-09-01T00:00:00Z', '20000000-0000-0000-0000-000000000002'),
+        ('90000000-0000-0000-0000-00000000c805', '20000000-0000-0000-0000-00000000c804', $1, '80000000-0000-0000-0000-00000000c805', '30000000-0000-0000-0000-000000000001', '70000000-0000-0000-0000-000000000001', '40000000-0000-0000-0000-000000000002', '{}'::jsonb, 48, 0, 0, 48, 'USD', 'monthly', 30, 'accepted', '2027-09-01T00:02:00Z', '2027-09-02T00:02:00Z', '2027-09-01T00:03:00Z', '2027-09-01T00:02:00Z', '20000000-0000-0000-0000-000000000002')`, [providerOrg]);
     await client.query(`
       INSERT INTO offer_approvals (id, offer_id, reviewer_id, decision, reason, decided_at)
       VALUES ('c8500000-0000-0000-0000-000000000001', '90000000-0000-0000-0000-00000000c805', '20000000-0000-0000-0000-000000000002', 'approved', 'CP08 approval fixture', '2027-09-01T00:03:30Z')`);
